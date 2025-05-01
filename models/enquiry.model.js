@@ -3,20 +3,22 @@ const mongoose = require('mongoose');
 const enquirySchema = new mongoose.Schema({
     Id: String,
     Name: String,
+    Quantity: Number,
+    StyleNumber: String,
     ClientId: { type: String, ref: 'Client' },
     StatusHistory: [{
         Status: String,
         Timestamp: Date,
-        AssignedTo: {
-            Id: String,
-            Name: String,
-            Email: String,
-            Phone: String,
-            Role: String
-        }
+        AssignedTo: String,
+        Details: String,
+        AddedBy: String
     }],
     Priority: String,
-    MetalType: String,
+    Metal: {
+        Type: String,
+        Quality: String
+    },
+    Category: String,
     StoneType: String,
     MetalWeight: {
         From: Number,
@@ -33,7 +35,7 @@ const enquirySchema = new mongoose.Schema({
     ShippingDate: Date,
     ReferenceImages: [{
         Id: String,
-        ImageUrl: String,
+        Url: String,
         Description: String
     }],
     Coral: [{
@@ -41,33 +43,34 @@ const enquirySchema = new mongoose.Schema({
         Version: String,
         Images: [{
             Id: String,
-            ImageUrl: String,
+            Url: String,
             Description: String
         }],
-        Excel: [{
+        Excel: {
             Id: String,
-            FileUrl: String,
+            Url: String,
             Description: String
-        }],
+        },
         Pricing: {
             From: Number,
             To: Number,
             Exact: Number
         },
         IsApprovedVersion: Boolean
+        // CreatedDate: Date
     }],
     Cad: [{
         Id: String,
         Version: String,
-        CreatedDate: Date,
+        // CreatedDate: Date,
         Images: [{
             Id: String,
-            ImageUrl: String,
+            Url: String,
             Description: String
         }],
         Excel: {
             Id: String,
-            FileUrl: String,
+            Url: String,
             Description: String
         },
         Pricing: {
@@ -80,3 +83,9 @@ const enquirySchema = new mongoose.Schema({
 });
 
 module.exports = mongoose.model('Enquiry', enquirySchema);
+
+
+
+// id , version, type , images, excel
+// type -> ref image -> upload images
+// type -> coral/cad -> version, images and excel
