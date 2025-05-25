@@ -29,6 +29,11 @@ router.put('/:id/upload/:type',
     controller.updateAssets
 )
 
+router.get('/pricingCalculate',
+    authenticateToken,
+    controller.getPricing
+)
+
 router.get('/files/:key', authenticateToken, controller.getPresignedFileUrl);
 
 module.exports = router;

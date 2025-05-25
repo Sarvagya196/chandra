@@ -88,3 +88,18 @@ exports.getPresignedFileUrl = async (req, res) => {
       res.status(500).json({ error: 'Failed to generate URL' });
     }
 };
+
+exports.getPricing = async (req, res) => {
+    try {
+        const detailsJson = req.body.details ? JSON.parse(req.query.details) : null;
+        if (!detailsJson) {
+            return res.status(400).json({ message: "Details parameter is required" });
+        }
+        const clientId = req.query.clientId;
+        const pricing = await service.calculatePricing(detailsJson, clientId);
+        res.json(pricing);
+    } catch (error) {
+        console.error("Error calculating pricing:", error);
+        res.status(500).json({ message: "Internal server error" });
+    }
+};

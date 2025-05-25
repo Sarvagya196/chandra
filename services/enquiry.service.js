@@ -262,8 +262,12 @@ async function handleCoralUpload(enquiry, files, version, userId) {
     }
 
     let excelTableJson = await handleExcelData(files.excel[0]);
+    excelTableJson.stones = excelTableJson.stones.map(stone => ({
+        ...stone,
+        type: enquiry.StoneType, // Add StoneType from enquiry
+    }));
     console.log("Excel Table JSON: ", excelTableJson);
-    let pricing = await handlePricing(excelTableJson, enquiry);
+    let pricing = await handleClientWisePricing(excelTableJson, enquiry);
     console.log("Pricing in main function: ", pricing);
 
     let pricingEntry = {
@@ -277,15 +281,15 @@ async function handleCoralUpload(enquiry, files, version, userId) {
             Loss: pricing.Loss,
             Labour: pricing.Labour,
         },
-        Stones: pricing.Stones.map(stone => ({
-            Color: stone.Color,
-            Shape: stone.Shape,
-            MmSize: stone.MmSize,
-            SieveSize: stone.SieveSize,
-            Weight: stone.Weight,
-            Pcs: stone.Pcs,
-            CtWeight: stone.CtWeight,
-            Price: stone.Price
+        Stones: pricing.Stones.map(Stone => ({
+            Color: Stone.Color,
+            Shape: Stone.Shape,
+            MmSize: Stone.MmSize,
+            SieveSize: Stone.SieveSize,
+            Weight: Stone.Weight,
+            Pcs: Stone.Pcs,
+            CtWeight: Stone.CtWeight,
+            Price: Stone.Price
         }))
     };
 
@@ -499,7 +503,7 @@ async function handleExcelData(file) {
     };
 }
 
-async function handlePricing(excelTable, enquiry) {
+async function handleClientWisePricing(excelTable, enquiry) {
     const client = await clientService.getClient(enquiry.ClientId);
     console.log("Client: ", client);
 
@@ -539,7 +543,7 @@ async function handlePricing(excelTable, enquiry) {
     // TODO add color when matching
     const stones = excelTable.stones.map(stone => {
         const matchingDiamond = client.Pricing.Diamonds.find(diamond =>
-            diamond.Type === enquiry.StoneType &&
+            diamond.Type === stone.type &&
             diamond.SieveSize === stone.sieveSize &&   
             diamond.Shape === stone.shape &&
             diamond.MmSize === stone.mmSize &&
@@ -572,11 +576,14 @@ async function handlePricing(excelTable, enquiry) {
         MetalWeight: numericMetalWeight,
         DiamondWeight: parseFloat(excelTable.diamondWeight),
         TotalPieces: excelTable.totalPieces,
-        Metal: {
+        Client: {
+            ExtraCharges: extraCharges,
+            Duties: duties,
             Loss: loss,
-            Labour: labour 
+            Labour: labour
         },
         Stones: stones.map(stone => ({
+            Type: stone.type,
             Color: stone.color,
             Shape: stone.shape,
             MmSize: stone.mmSize,
@@ -589,6 +596,63 @@ async function handlePricing(excelTable, enquiry) {
     };
 }
 
+exports.calculatePricing = async (pricingDetails, clientId) => {
+    //TODO which metal is it-> take that as parameter
+    const client = await clientService.getClient(clientId);
+    stones = pricingDetails.Stones;
+    metalWeight = parseFloat(pricingDetails.Metal.Weight);
+    loss = pricingDetails.Metal.Loss || 0;
+    labour = pricingDetails.Metal.Labour || 0;
+    extraCharges = pricingDetails.ExtraCharges || 0;
+    duties = pricingDetails.Duties || 0;
+    metalRate = 104; //TODO get current metal rate
+
+    const diamondWeight = stones.reduce((sum, stone) => {
+        return sum + stone.CtWeight;
+    }, 0);
+
+    // Calculate Metal Price
+    const lossFactor = loss / 100;
+    const metalPrice = metalWeight * ((metalRate * (1 + lossFactor)) + labour);
+    console.log("Metal Price: ", metalPrice);
+
+    // Calculate Diamonds Price
+    const diamondsPrice = stones.reduce((sum, stone) => {
+        const ratePerStone = stone.Price;
+        return sum + (stone.CtWeight * ratePerStone);
+    }, 0);
+    console.log("Diamonds Price: ", diamondsPrice);
+
+    const subtotal = metalPrice + diamondsPrice + extraCharges;
+    const dutiesAmount = subtotal * (duties / 100);
+    const totalPrice = subtotal + dutiesAmount;
+    return {
+        MetalPrice: parseFloat(metalPrice.toFixed(2)),
+        DiamondsPrice: parseFloat(diamondPrice.toFixed(2)),
+        TotalPrice: parseFloat(totalPrice.toFixed(2)),
+        MetalWeight: metalWeight,
+        DiamondWeight: diamondWeight,
+        TotalPieces: pricingDetails.TotalPieces,
+        Client: {
+            ExtraCharges: extraCharges,
+            Duties: duties,
+            Loss: loss,
+            Labour: labour
+        },
+        Stones: stones.map(stone => ({
+            Type: stone.Type,
+            Color: stone.Color,
+            Shape: stone.Shape,
+            MmSize: stone.MmSize,
+            SieveSize: stone.SieveSize,
+            Weight: stone.Weight,
+            Price: parseFloat(stone.Price.toFixed(3)),
+            Pcs: stone.Pcs,
+            CtWeight: stone.CtWeight
+        }))
+    };
+
+}
 
 
 exports.getPresignedUrl = async (key, action) => {
