@@ -1,14 +1,19 @@
 const service = require('../services/user.service');
 
 exports.getUsers = async (req, res) => {
-    try{
-        const users = await service.getUsers();
-        res.json(users);
+    try {
+      const users = await service.getUsers();
+
+      const filteredUsers = users.map(user => ({
+        Id: user._id,
+        Name: user.name
+      }));
+  
+      res.json(filteredUsers);
     } catch (err) {
-        res.status(500).json({ error: err.message });
+      res.status(500).json({ error: err.message });
     }
-    
-};
+  };
 
 exports.getUserById = async (req, res) => {
     try {

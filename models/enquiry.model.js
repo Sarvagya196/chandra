@@ -1,10 +1,40 @@
 const mongoose = require('mongoose');
 
+  const StoneSchema = new mongoose.Schema({
+    Color: String,
+    Shape: String,
+    MmSize: String,
+    SieveSize: String,
+    Weight: Number,
+    Pcs: Number,
+    CtWeight: Number,
+    Price: Number,
+  }, { _id: false });
+
+  const MetalSchema = new mongoose.Schema({
+    Loss: { type: Number, default: 0 },
+    Labour: { type: Number, default: 0 },
+  }, { _id: false });
+
+  const PricingSchema = new mongoose.Schema({
+    MetalPrice: { type: Number, default: 0 },
+    DiamondsPrice: { type: Number, default: 0 },
+    TotalPrice: { type: Number, default: 0 },
+    MetalWeight: String,
+    DiamondWeight: Number,
+    TotalPieces: Number,
+    Stones: {
+      type: [StoneSchema]
+    },
+    Metal: MetalSchema,
+    Message: String,
+  }, { _id: false });
+
 const enquirySchema = new mongoose.Schema({
-    Id: String,
     Name: String,
     Quantity: Number,
     StyleNumber: String,
+    GatiOrderNumber: String,
     ClientId: { type: String, ref: 'Client' },
     StatusHistory: [{
         Status: String,
@@ -35,57 +65,45 @@ const enquirySchema = new mongoose.Schema({
     ShippingDate: Date,
     ReferenceImages: [{
         Id: String,
-        Url: String,
+        Key: String,
         Description: String
     }],
     Coral: [{
-        Id: String,
         Version: String,
         Images: [{
             Id: String,
-            Url: String,
+            Key: String,
             Description: String
         }],
         Excel: {
             Id: String,
-            Url: String,
+            Key: String,
             Description: String
         },
         Pricing: {
-            From: Number,
-            To: Number,
-            Exact: Number
+            type: PricingSchema
         },
-        IsApprovedVersion: Boolean
-        // CreatedDate: Date
+        IsApprovedVersion: Boolean,
+        CreatedDate: Date
     }],
     Cad: [{
-        Id: String,
         Version: String,
-        // CreatedDate: Date,
+        CreatedDate: Date,
         Images: [{
             Id: String,
-            Url: String,
+            Key: String,
             Description: String
         }],
         Excel: {
             Id: String,
-            Url: String,
+            Key: String,
             Description: String
         },
         Pricing: {
-            From: Number,
-            To: Number,
-            Exact: Number
+            type: PricingSchema
         },
         IsFinalVersion: Boolean
     }]
 });
 
 module.exports = mongoose.model('Enquiry', enquirySchema);
-
-
-
-// id , version, type , images, excel
-// type -> ref image -> upload images
-// type -> coral/cad -> version, images and excel
