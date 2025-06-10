@@ -29,7 +29,7 @@ router.put('/:id/upload/:type',
     controller.updateAssets
 )
 
-router.get('/pricingCalculate',
+router.post('/pricingCalculate',
     authenticateToken,
     controller.getPricing
 )

@@ -91,11 +91,11 @@ exports.getPresignedFileUrl = async (req, res) => {
 
 exports.getPricing = async (req, res) => {
     try {
-        const detailsJson = req.body.details ? JSON.parse(req.query.details) : null;
+        const detailsJson = req.body.details;
         if (!detailsJson) {
             return res.status(400).json({ message: "Details parameter is required" });
         }
-        const clientId = req.query.clientId;
+        const clientId = req.body.clientId;
         const pricing = await service.calculatePricing(detailsJson, clientId);
         res.json(pricing);
     } catch (error) {

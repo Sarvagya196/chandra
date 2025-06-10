@@ -130,7 +130,7 @@ exports.updateAssetData = async (enquiryId, type, version, data, userId) => {
                     if(data.IsApprovedVersion === true) {
                         updatedCoral.IsApprovedVersion = data.IsApprovedVersion;
                         statusEntry = {
-                            Status: 'Cad Pending',
+                            Status: 'CAD Pending',
                             Timestamp: new Date(),
                             AssignedTo: null,
                             AddedBy: userId || 'System',
@@ -150,7 +150,6 @@ exports.updateAssetData = async (enquiryId, type, version, data, userId) => {
                 }
 
                 if (data.Pricing !== undefined && data.Pricing !== null) {
-                    console.log("Pricing in update function: ", data.Pricing);
                     updatedCoral.Pricing = data.Pricing;
                     statusEntry = {
                         Status: enquiry.StatusHistory?.at(-1)?.Status,
@@ -161,7 +160,6 @@ exports.updateAssetData = async (enquiryId, type, version, data, userId) => {
                     };
                     enquiry.StatusHistory.push(statusEntry);
                 }
-                console.log("Updated Coral: ", updatedCoral);
                 // Replace the item at the found index
                 enquiry.Coral[coralIndex] = updatedCoral;
             }
@@ -187,7 +185,7 @@ exports.updateAssetData = async (enquiryId, type, version, data, userId) => {
                     }
                     else {
                         statusEntry = {
-                            Status: 'Cad Pending',
+                            Status: 'CAD Pending',
                             Timestamp: new Date(),
                             AssignedTo: null,
                             AddedBy: userId || 'System',
@@ -262,26 +260,35 @@ async function handleCoralUpload(enquiry, files, version, userId) {
     }
 
     let excelTableJson = await handleExcelData(files.excel[0]);
-    excelTableJson.stones = excelTableJson.stones.map(stone => ({
+    excelTableJson.Stones = excelTableJson.Stones.map(stone => ({
         ...stone,
-        type: enquiry.StoneType, // Add StoneType from enquiry
+        Type: enquiry.StoneType, // Add StoneType from enquiry
     }));
-    console.log("Excel Table JSON: ", excelTableJson);
-    let pricing = await handleClientWisePricing(excelTableJson, enquiry);
-    console.log("Pricing in main function: ", pricing);
+    excelTableJson.Metal = {
+        Weight: excelTableJson.Metal.Weight || null,
+        Quality: enquiry.Metal.Quality || null,
+        Type: enquiry.Metal.Type || null
+    };
+
+    let pricing = await exports.calculatePricing(excelTableJson, enquiry.ClientId);
 
     let pricingEntry = {
         MetalPrice: pricing.MetalPrice,
         DiamondsPrice: pricing.DiamondsPrice,
         TotalPrice: pricing.TotalPrice,
-        MetalWeight: excelTableJson.metalWeight,
-        DiamondWeight: parseFloat(excelTableJson.diamondWeight),
-        TotalPieces: excelTableJson.totalPieces,
+        DiamondWeight: parseFloat(excelTableJson.DiamondWeight),
+        TotalPieces: excelTableJson.TotalPieces,
+        Loss: pricing.Client.Loss,
+        Labour: pricing.Client.Labour,
+        ExtraCharges: pricing.Client.ExtraCharges,
+        Duties: pricing.Client.Duties,
         Metal: {
-            Loss: pricing.Loss,
-            Labour: pricing.Labour,
+            Weight: pricing.Metal.Weight,
+            Quality: pricing.Metal.Quality,
+            Type: pricing.Metal.Type
         },
         Stones: pricing.Stones.map(Stone => ({
+            Type: Stone.Type,
             Color: Stone.Color,
             Shape: Stone.Shape,
             MmSize: Stone.MmSize,
@@ -297,13 +304,20 @@ async function handleCoralUpload(enquiry, files, version, userId) {
 
     // Push to the Coral array
     enquiry.Coral = enquiry.Coral || [];
-    enquiry.Coral.push(asset);
+
+    // If asset already exists, update it
+    const index = enquiry.Coral.findIndex(a => a.Version === assetVersion);
+    if (index !== -1) {
+        enquiry.Coral[index] = asset; // Update the existing asset
+    } else {
+        enquiry.Coral.push(asset); // If not found, push the new asset
+    }
 
     // Add a status history entry for Coral upload
     const statusEntry = {
         Status: 'Approval Pending',
         Timestamp: new Date(),
-        AddedBy: userId, // User ID from JWT token
+        AddedBy: userId,
         Details: `Coral Version ${asset.Version} uploaded`
     };
 
@@ -353,37 +367,57 @@ async function handleCadUpload(enquiry, files, version, userId) {
         };
     }
 
-    let excelTableJson = this.handleExcelData(files.excel[0]);
-    let pricing = this.handlePricing(excelTableJson, enquiry.ClientId);
+let excelTableJson = await handleExcelData(files.excel[0]);
+    excelTableJson.Stones = excelTableJson.Stones.map(stone => ({
+        ...stone,
+        Type: enquiry.StoneType, // Add StoneType from enquiry
+    }));
+    excelTableJson.Metal = {
+        Weight: excelTableJson.Metal.Weight || null,
+        Quality: enquiry.Metal.Quality || null,
+        Type: enquiry.Metal.Type || null
+    };
+
+    let pricing = await exports.calculatePricing(excelTableJson, enquiry.ClientId);
 
     let pricingEntry = {
         MetalPrice: pricing.MetalPrice,
         DiamondsPrice: pricing.DiamondsPrice,
         TotalPrice: pricing.TotalPrice,
-        MetalWeight: excelTableJson.metalWeight,
-        DiamondWeight: parseFloat(excelTableJson.diamondWeight),
-        TotalPieces: excelTableJson.totalPieces,
+        DiamondWeight: parseFloat(excelTableJson.DiamondWeight),
+        TotalPieces: excelTableJson.TotalPieces,
+        Loss: pricing.Client.Loss,
+        Labour: pricing.Client.Labour,
+        ExtraCharges: pricing.Client.ExtraCharges,
+        Duties: pricing.Client.Duties,
         Metal: {
-            Loss: pricing.Loss,
-            Labour: pricing.Labour,
+            Weight: pricing.Metal.Weight,
+            Quality: pricing.Metal.Quality,
+            Type: pricing.Metal.Type
         },
-        Stones: pricing.Stones.map(stone => ({
-            Color: stone.Color,
-            Shape: stone.Shape,
-            MmSize: stone.MmSize,
-            SieveSize: stone.SieveSize,
-            Weight: stone.Weight,
-            Pcs: stone.Pcs,
-            CtWeight: stone.CtWeight,
-            Price: stone.Price
+        Stones: pricing.Stones.map(Stone => ({
+            Type: Stone.Type,
+            Color: Stone.Color,
+            Shape: Stone.Shape,
+            MmSize: Stone.MmSize,
+            SieveSize: Stone.SieveSize,
+            Weight: Stone.Weight,
+            Pcs: Stone.Pcs,
+            CtWeight: Stone.CtWeight,
+            Price: Stone.Price
         }))
     };
 
     asset.Pricing = pricingEntry || null;
 
     // Push to the Cad array
-    enquiry.Cad = enquiry.Cad || [];
-    enquiry.Cad.push(asset);
+// If asset already exists, update it
+    const index = enquiry.Cad.findIndex(a => a.Version === assetVersion);
+    if (index !== -1) {
+        enquiry.Cad[index] = asset; // Update the existing asset
+    } else {
+        enquiry.Cad.push(asset); // If not found, push the new asset
+    }
 
     // Add a status history entry for Cad upload
     const statusEntry = {
@@ -455,27 +489,27 @@ async function handleExcelData(file) {
     let index = 0;
     for (const row of jsonData) {
         index++;
-        const color = row['DIA/COL']?.toString().trim();
-        const shape = row['ST Shape']?.toString().trim();
-        const mmSize = row['MM Size']?.toString().trim();
-        const sieveSize = row['Sieve Size']?.toString().trim();
-        const weight = parseFloat(row['AVRG WT']) || 0;
-        const pcs = parseInt(row['PCS']) || 0;
-        const ctWeight = parseFloat(row['CT WT']) || 0;
+        const Color = row['DIA/COL']?.toString().trim();
+        const Shape = row['ST Shape']?.toString().trim();
+        const MmSize = parseFloat(row['MM Size']) || 0;
+        const SieveSize = row['Sieve Size']?.toString().trim();
+        const Weight = parseFloat(row['AVRG WT']) || 0;
+        const Pcs = parseInt(row['PCS']) || 0;
+        const CtWeight = parseFloat(row['CT WT']) || 0;
 
         // Accumulate total pieces
-        totalPieces += pcs;
+        totalPieces += Pcs;
 
         // If it's a valid stone row (with settingType or shape), include it
-        if (shape) {
+        if (Shape) {
             stones.push({
-                color,
-                shape,
-                mmSize,
-                sieveSize,
-                weight,
-                pcs,
-                ctWeight
+                Color,
+                Shape,
+                MmSize,
+                SieveSize,
+                Weight,
+                Pcs,
+                CtWeight
             });
         }
 
@@ -490,29 +524,26 @@ async function handleExcelData(file) {
         }
     }
 
-    // console.log("Stones: ", stones);
-    // console.log("Diamond Weight: ", diamondWeight);
-    // console.log("Gold Weight: ", goldWeight);
-    // console.log("Total Pieces: ", totalPieces);
 
     return {
-        stones,
-        diamondWeight,
-        metalWeight,
-        totalPieces
+        Stones: stones,
+        DiamondWeight: diamondWeight,
+        Metal: {
+            Weight: metalWeight,
+        },
+        TotalPieces: totalPieces
     };
 }
 
-async function handleClientWisePricing(excelTable, enquiry) {
-    const client = await clientService.getClient(enquiry.ClientId);
-    console.log("Client: ", client);
-
-    let metalRate = 104; //TODO get current metal rate
-    let loss = client.Pricing.Loss || 0;
-    let labour = client.Pricing.Labour || 0;
-    let extraCharges = client.Pricing.ExtraCharges || 0;
-    let duties = client.Pricing.Duties || 0;
-
+exports.calculatePricing = async (pricingDetails, clientId) => {
+    //TODO which metal is it-> take that as parameter
+    let loss, labour, extraCharges, duties, metalRate, stones, metalWeight, metalQuality, metalType, metalPrice;
+    stones = pricingDetails.Stones;
+    metalWeight = parseFloat(pricingDetails.Metal.Weight);
+    metalQuality = pricingDetails.Metal.Quality;
+    metalType = pricingDetails.Metal.Type;
+    metalRate = 104; //TODO get current metal rate
+    
     // Determine metal rate
     // if (enquiry.Metal.Type === "Silver") {
     //   metalRate = client.SilverPrice;
@@ -530,107 +561,66 @@ async function handleClientWisePricing(excelTable, enquiry) {
     //   }
     // }
 
-    // Fallback if excelTable.goldWeight is not a number (e.g., '15gms')
-    const numericMetalWeight = parseFloat(excelTable.metalWeight);
+
+    if (clientId === null || clientId === undefined || clientId === "") {
+        loss = pricingDetails.Loss || 0;
+        labour = pricingDetails.Labour || 0;
+        extraCharges = pricingDetails.ExtraCharges || 0;
+        duties = pricingDetails.Duties || 0;
+    }
+    else {
+        const client = await clientService.getClient(clientId);
+        loss = client.Pricing.Loss || 0;
+        labour = client.Pricing.Labour || 0;
+        extraCharges = client.Pricing.ExtraCharges || 0;
+        duties = client.Pricing.Duties || 0;
+
+        // Calculate Diamonds Price
+        stones = stones.map(stone => {
+            const matchingDiamond = client.Pricing.Diamonds.find(diamond =>
+                diamond.Type === stone.Type &&
+                diamond.SieveSize === stone.SieveSize &&
+                diamond.Shape === stone.Shape &&
+                Number(diamond.MmSize) === Number(stone.MmSize) &&
+                Number(diamond.Carat) == Number(stone.Weight)
+            );
+        
+            const Price = matchingDiamond ? matchingDiamond.Price ?? 0 : 0;
+        
+            return {
+                ...stone,
+                Price
+            };
+        });  
+    }
+
+    // Calculate Diamonds Price
+    const { diamondsPrice, diamondWeight } = stones.reduce(
+        (acc, stone) => {
+            const ratePerStone = stone.Price;
+            acc.diamondsPrice += stone.Pcs * ratePerStone;
+            acc.diamondWeight += stone.CtWeight;
+            return acc;
+        },
+        { diamondsPrice: 0, diamondWeight: 0 }
+    );
 
     // Calculate Metal Price
     const lossFactor = loss / 100;
-    const metalPrice = numericMetalWeight * ((metalRate * (1 + lossFactor)) + labour);
-    console.log("Metal Price: ", metalPrice);
-
-
-    // Calculate Diamonds Price
-    // TODO add color when matching
-    const stones = excelTable.stones.map(stone => {
-        const matchingDiamond = client.Pricing.Diamonds.find(diamond =>
-            diamond.Type === stone.type &&
-            diamond.SieveSize === stone.sieveSize &&   
-            diamond.Shape === stone.shape &&
-            diamond.MmSize === stone.mmSize &&
-            diamond.Carat === stone.weight
-        );
-
-        const ratePerStone = matchingDiamond ? matchingDiamond.Rate : 0;
-        const price = stone.ctWeight * ratePerStone;
-
-        return {
-            ...stone,
-            ratePerStone,
-            price,
-        };
-    });
-    console.log("Stones: ", stones);
-
-
-    const diamondsPrice = stones.reduce((sum, stone) => sum + stone.price, 0);
-    console.log("Diamonds Price: ", diamondsPrice);
+    metalPrice = metalWeight * ((metalRate * (1 + lossFactor)) + labour);
 
     const subtotal = metalPrice + diamondsPrice + extraCharges;
     const dutiesAmount = subtotal * (duties / 100);
     const totalPrice = subtotal + dutiesAmount;
-
     return {
         MetalPrice: parseFloat(metalPrice.toFixed(2)),
         DiamondsPrice: parseFloat(diamondsPrice.toFixed(2)),
         TotalPrice: parseFloat(totalPrice.toFixed(2)),
-        MetalWeight: numericMetalWeight,
-        DiamondWeight: parseFloat(excelTable.diamondWeight),
-        TotalPieces: excelTable.totalPieces,
-        Client: {
-            ExtraCharges: extraCharges,
-            Duties: duties,
-            Loss: loss,
-            Labour: labour
+        Metal: {
+            Weight: metalWeight,
+            Quality: metalQuality,
+            Type: metalType
         },
-        Stones: stones.map(stone => ({
-            Type: stone.type,
-            Color: stone.color,
-            Shape: stone.shape,
-            MmSize: stone.mmSize,
-            SieveSize: stone.sieveSize,
-            Weight: stone.weight,
-            Price: parseFloat(stone.ratePerStone.toFixed(3)),
-            Pcs: stone.pcs,
-            CtWeight: stone.ctWeight,
-        }))
-    };
-}
-
-exports.calculatePricing = async (pricingDetails, clientId) => {
-    //TODO which metal is it-> take that as parameter
-    const client = await clientService.getClient(clientId);
-    stones = pricingDetails.Stones;
-    metalWeight = parseFloat(pricingDetails.Metal.Weight);
-    loss = pricingDetails.Metal.Loss || 0;
-    labour = pricingDetails.Metal.Labour || 0;
-    extraCharges = pricingDetails.ExtraCharges || 0;
-    duties = pricingDetails.Duties || 0;
-    metalRate = 104; //TODO get current metal rate
-
-    const diamondWeight = stones.reduce((sum, stone) => {
-        return sum + stone.CtWeight;
-    }, 0);
-
-    // Calculate Metal Price
-    const lossFactor = loss / 100;
-    const metalPrice = metalWeight * ((metalRate * (1 + lossFactor)) + labour);
-    console.log("Metal Price: ", metalPrice);
-
-    // Calculate Diamonds Price
-    const diamondsPrice = stones.reduce((sum, stone) => {
-        const ratePerStone = stone.Price;
-        return sum + (stone.CtWeight * ratePerStone);
-    }, 0);
-    console.log("Diamonds Price: ", diamondsPrice);
-
-    const subtotal = metalPrice + diamondsPrice + extraCharges;
-    const dutiesAmount = subtotal * (duties / 100);
-    const totalPrice = subtotal + dutiesAmount;
-    return {
-        MetalPrice: parseFloat(metalPrice.toFixed(2)),
-        DiamondsPrice: parseFloat(diamondPrice.toFixed(2)),
-        TotalPrice: parseFloat(totalPrice.toFixed(2)),
-        MetalWeight: metalWeight,
         DiamondWeight: diamondWeight,
         TotalPieces: pricingDetails.TotalPieces,
         Client: {

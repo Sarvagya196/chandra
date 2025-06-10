@@ -1,6 +1,7 @@
 const mongoose = require('mongoose');
 
   const StoneSchema = new mongoose.Schema({
+    Type: String,
     Color: String,
     Shape: String,
     MmSize: String,
@@ -12,15 +13,19 @@ const mongoose = require('mongoose');
   }, { _id: false });
 
   const MetalSchema = new mongoose.Schema({
-    Loss: { type: Number, default: 0 },
-    Labour: { type: Number, default: 0 },
+    Weight: Number,
+    Type: String,
+    Quality: String,
   }, { _id: false });
 
   const PricingSchema = new mongoose.Schema({
     MetalPrice: { type: Number, default: 0 },
     DiamondsPrice: { type: Number, default: 0 },
     TotalPrice: { type: Number, default: 0 },
-    MetalWeight: String,
+    Loss: { type: Number, default: 0 },
+    Labour: { type: Number, default: 0 },
+    ExtraCharges: { type: Number, default: 0 },
+    Duties: { type: Number, default: 0 },
     DiamondWeight: Number,
     TotalPieces: Number,
     Stones: {
