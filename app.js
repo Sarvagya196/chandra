@@ -14,8 +14,6 @@ app.use(cors({
   credentials: true
 }));
 
-// Optional: Handle preflight requests
-app.options('*', cors());
 app.use(bodyParser.json());
 
 // Main function to run app
