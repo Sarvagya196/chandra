@@ -7,7 +7,15 @@ const connectDB = require('./config/db');
 const routes = require('./routes');
 
 const app = express();
-app.use(cors());
+app.use(cors({
+  origin: '*', // or use '*' if you're testing
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization'],
+  credentials: true
+}));
+
+// Optional: Handle preflight requests
+app.options('*', cors());
 app.use(bodyParser.json());
 
 // Main function to run app
