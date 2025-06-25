@@ -11,6 +11,6 @@ router.use('/enquiries', enquiryRoutes);
 router.use('/clients', clientRoutes);
 router.use('/users', userRoutes);
 router.use('/login', loginRoutes);
-router.use('/metalPrices', metalPricesRoutes);
+router.use('/metal-prices', metalPricesRoutes);
 
 module.exports = router;

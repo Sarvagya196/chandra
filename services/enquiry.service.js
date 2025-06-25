@@ -1,6 +1,7 @@
 const repo = require('../repositories/enquiry.repo');
 const userService = require("../services/user.service");
 const clientService = require("../services/client.service");
+const metalPricesService = require("../services/metalPrices.service");
 const { uploadToS3, generatePresignedUrl } = require('../utils/s3');
 const { v4: uuidv4 } = require('uuid');
 const xlsx = require('xlsx');
@@ -542,25 +543,26 @@ exports.calculatePricing = async (pricingDetails, clientId) => {
     metalWeight = parseFloat(pricingDetails.Metal.Weight);
     metalQuality = pricingDetails.Metal.Quality;
     metalType = pricingDetails.Metal.Type;
-    metalRate = 104; //TODO get current metal rate
     
-    // Determine metal rate
-    // if (enquiry.Metal.Type === "Silver") {
-    //   metalRate = client.SilverPrice;
-    // } else if (enquiry.Metal.Type === "Platinum") {
-    //   metalRate = client.PlatinumPrice;
-    // } else {
-    //   if (enquiry.Metal.Quality === "14K") {
-    //     metalRate = client.FourteenKPrice;
-    //   } else if (enquiry.Metal.Quality === "18K") {
-    //     metalRate = client.EighteenKPrice;
-    //   } else if (enquiry.Metal.Quality === "22K") {
-    //     metalRate = client.TwentyTwoKPrice;
-    //   } else if (enquiry.Metal.Quality === "24K") {
-    //     metalRate = client.TwentyFourKPrice;
-    //   }
-    // }
+    const todaysMetalRates = await metalPricesService.getLatest();
 
+    // Determine metal rate
+    if (pricingDetails.Metal.Type === "Silver") {
+      metalRate = todaysMetalRates.silver.price;
+    } else if (pricingDetails.Metal.Type === "Platinum") {
+      metalRate = todaysMetalRates.platinum.price;
+    } else {
+        const goldRate = todaysMetalRates.gold.price;
+      if (pricingDetails.Metal.Quality === "14K") {
+        metalRate = (goldRate * 14) / 24; // 14K Gold
+      } else if (pricingDetails.Metal.Quality === "18K") {
+        metalRate = (goldRate * 18) / 24; // 18K Gold
+      } else if (pricingDetails.Metal.Quality === "22K") {
+        metalRate = (goldRate * 22) / 24; // 22K Gold
+      } else if (pricingDetails.Metal.Quality === "24K") {
+        metalRate = goldRate; // 24K Gold
+      }
+    }
 
     if (clientId === null || clientId === undefined || clientId === "") {
         loss = pricingDetails.Loss || 0;
