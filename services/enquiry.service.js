@@ -128,7 +128,7 @@ exports.updateAssetData = async (enquiryId, type, version, data, userId) => {
                 const updatedCoral = enquiry.Coral[coralIndex];
 
                 if (data.IsApprovedVersion !== undefined && data.IsApprovedVersion !== null) {
-                    if(data.IsApprovedVersion === true) {
+                    if (data.IsApprovedVersion === true) {
                         updatedCoral.IsApprovedVersion = data.IsApprovedVersion;
                         statusEntry = {
                             Status: 'CAD Pending',
@@ -174,7 +174,7 @@ exports.updateAssetData = async (enquiryId, type, version, data, userId) => {
                 const updatedCad = enquiry.Cad[cadIndex];
 
                 if (data.IsFinalVersion !== undefined && data.IsFinalVersion !== null) {
-                    if(data.IsFinalVersion === true) {
+                    if (data.IsFinalVersion === true) {
                         updatedCad.IsFinalVersion = data.IsFinalVersion;
                         statusEntry = {
                             Status: 'Order Placement',
@@ -220,7 +220,7 @@ exports.updateAssetData = async (enquiryId, type, version, data, userId) => {
     }
 
     // Save the updated enquiry
-  return await repo.updateEnquiry(enquiryId, enquiry);
+    return await repo.updateEnquiry(enquiryId, enquiry);
 };
 
 
@@ -368,7 +368,7 @@ async function handleCadUpload(enquiry, files, version, userId) {
         };
     }
 
-let excelTableJson = await handleExcelData(files.excel[0]);
+    let excelTableJson = await handleExcelData(files.excel[0]);
     excelTableJson.Stones = excelTableJson.Stones.map(stone => ({
         ...stone,
         Type: enquiry.StoneType, // Add StoneType from enquiry
@@ -412,7 +412,7 @@ let excelTableJson = await handleExcelData(files.excel[0]);
     asset.Pricing = pricingEntry || null;
 
     // Push to the Cad array
-// If asset already exists, update it
+    // If asset already exists, update it
     const index = enquiry.Cad.findIndex(a => a.Version === assetVersion);
     if (index !== -1) {
         enquiry.Cad[index] = asset; // Update the existing asset
@@ -543,25 +543,27 @@ exports.calculatePricing = async (pricingDetails, clientId) => {
     metalWeight = parseFloat(pricingDetails.Metal.Weight);
     metalQuality = pricingDetails.Metal.Quality;
     metalType = pricingDetails.Metal.Type;
-    
+
     const todaysMetalRates = await metalPricesService.getLatest();
 
     // Determine metal rate
     if (pricingDetails.Metal.Type === "Silver") {
-      metalRate = todaysMetalRates.silver.price;
+        metalRate = todaysMetalRates.silver.price;
     } else if (pricingDetails.Metal.Type === "Platinum") {
-      metalRate = todaysMetalRates.platinum.price;
+        metalRate = todaysMetalRates.platinum.price;
     } else {
         const goldRate = todaysMetalRates.gold.price;
-      if (pricingDetails.Metal.Quality === "14K") {
-        metalRate = (goldRate * 14) / 24; // 14K Gold
-      } else if (pricingDetails.Metal.Quality === "18K") {
-        metalRate = (goldRate * 18) / 24; // 18K Gold
-      } else if (pricingDetails.Metal.Quality === "22K") {
-        metalRate = (goldRate * 22) / 24; // 22K Gold
-      } else if (pricingDetails.Metal.Quality === "24K") {
-        metalRate = goldRate; // 24K Gold
-      }
+        if (pricingDetails.Metal.Quality === "10K") {
+            metalRate = (goldRate * 10) / 24; // 10K Gold
+        } else if (pricingDetails.Metal.Quality === "14K") {
+            metalRate = (goldRate * 14) / 24; // 14K Gold
+        } else if (pricingDetails.Metal.Quality === "18K") {
+            metalRate = (goldRate * 18) / 24; // 18K Gold
+        } else if (pricingDetails.Metal.Quality === "22K") {
+            metalRate = (goldRate * 22) / 24; // 22K Gold
+        } else if (pricingDetails.Metal.Quality === "24K") {
+            metalRate = goldRate; // 24K Gold
+        }
     }
 
     if (clientId === null || clientId === undefined || clientId === "") {
@@ -586,14 +588,14 @@ exports.calculatePricing = async (pricingDetails, clientId) => {
                 Number(diamond.MmSize) === Number(stone.MmSize) &&
                 Number(diamond.Carat) == Number(stone.Weight)
             );
-        
+
             const Price = matchingDiamond ? matchingDiamond.Price ?? 0 : 0;
-        
+
             return {
                 ...stone,
                 Price
             };
-        });  
+        });
     }
 
     // Calculate Diamonds Price
