@@ -7,26 +7,20 @@ const connectDB = require('./config/db');
 const routes = require('./routes');
 
 const app = express();
+
 const allowedOrigins = [
   'http://localhost:4200',
-  'https://workflow-ui-virid.vercel.app' // your production frontend
+  'https://workflow-ui-virid.vercel.app'
 ];
 
 const corsOptions = {
-  origin: (origin, callback) => {
-    if (!origin || allowedOrigins.includes(origin)) {
-      callback(null, true);
-    } else {
-      callback(new Error('Not allowed by CORS'));
-    }
-  },
+  origin: allowedOrigins,
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
   allowedHeaders: ['Content-Type', 'Authorization'],
   credentials: true
 };
 
 app.use(cors(corsOptions));
-app.options('*', cors(corsOptions));
 
 app.use(bodyParser.json());
 
