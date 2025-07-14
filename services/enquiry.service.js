@@ -28,7 +28,7 @@ exports.createEnquiry = async (data, userId) => {
         }
     ];
 
-    if (AssignedTo || Status) {
+    if (AssignedTo || Status !== 'Enquiry Created') {
         StatusHistory.push({
             Status: Status,
             Timestamp: new Date(),
@@ -70,7 +70,7 @@ exports.updateEnquiry = async (id, data, userId) => {
 
         if (data.hasOwnProperty(key) && oldValue !== newValue) {
             updatedFields[key] = data[key];
-            changes.push(`${key}: from "${enquiry[key]}" to "${data[key]}"`);
+            changes.push(`${key}: from "${oldValue}" to "${newValue}"`);
         }
     }
 
@@ -131,7 +131,7 @@ exports.updateAssetData = async (enquiryId, type, version, data, userId) => {
                     if (data.IsApprovedVersion === true) {
                         updatedCoral.IsApprovedVersion = data.IsApprovedVersion;
                         statusEntry = {
-                            Status: 'CAD Pending',
+                            Status: 'CAD',
                             Timestamp: new Date(),
                             AssignedTo: null,
                             AddedBy: userId || 'System',
@@ -140,9 +140,9 @@ exports.updateAssetData = async (enquiryId, type, version, data, userId) => {
                     }
                     else {
                         statusEntry = {
-                            Status: 'Coral Pending',
+                            Status: 'Coral',
                             Timestamp: new Date(),
-                            AssignedTo: null,
+                            AssignedTo: enquiry.StatusHistory?.at(-1)?.AssignedTo,
                             AddedBy: userId || 'System',
                             Details: "Coral Rejected - Redo"
                         };
@@ -186,9 +186,9 @@ exports.updateAssetData = async (enquiryId, type, version, data, userId) => {
                     }
                     else {
                         statusEntry = {
-                            Status: 'CAD Pending',
+                            Status: 'CAD',
                             Timestamp: new Date(),
-                            AssignedTo: null,
+                            AssignedTo: enquiry.StatusHistory?.at(-1)?.AssignedTo,
                             AddedBy: userId || 'System',
                             Details: "Cad Rejected - Redo"
                         };
@@ -260,48 +260,50 @@ async function handleCoralUpload(enquiry, files, version, userId) {
         };
     }
 
-    let excelTableJson = await handleExcelData(files.excel[0]);
-    excelTableJson.Stones = excelTableJson.Stones.map(stone => ({
-        ...stone,
-        Type: enquiry.StoneType, // Add StoneType from enquiry
-    }));
-    excelTableJson.Metal = {
-        Weight: excelTableJson.Metal.Weight || null,
-        Quality: enquiry.Metal.Quality || null,
-        Type: enquiry.Metal.Type || null
-    };
+    let excelTableJson = await handleExcelData(files.excel?.[0]);
+    if (excelTableJson) {
+        excelTableJson.Stones = excelTableJson.Stones.map(stone => ({
+            ...stone,
+            Type: enquiry.StoneType, // Add StoneType from enquiry
+        }));
+        excelTableJson.Metal = {
+            Weight: excelTableJson.Metal.Weight || null,
+            Quality: enquiry.Metal.Quality || null,
+            Type: enquiry.Metal.Type || null
+        };
 
-    let pricing = await exports.calculatePricing(excelTableJson, enquiry.ClientId);
+        let pricing = await exports.calculatePricing(excelTableJson, enquiry.ClientId);
 
-    let pricingEntry = {
-        MetalPrice: pricing.MetalPrice,
-        DiamondsPrice: pricing.DiamondsPrice,
-        TotalPrice: pricing.TotalPrice,
-        DiamondWeight: parseFloat(excelTableJson.DiamondWeight),
-        TotalPieces: excelTableJson.TotalPieces,
-        Loss: pricing.Client.Loss,
-        Labour: pricing.Client.Labour,
-        ExtraCharges: pricing.Client.ExtraCharges,
-        Duties: pricing.Client.Duties,
-        Metal: {
-            Weight: pricing.Metal.Weight,
-            Quality: pricing.Metal.Quality,
-            Type: pricing.Metal.Type
-        },
-        Stones: pricing.Stones.map(Stone => ({
-            Type: Stone.Type,
-            Color: Stone.Color,
-            Shape: Stone.Shape,
-            MmSize: Stone.MmSize,
-            SieveSize: Stone.SieveSize,
-            Weight: Stone.Weight,
-            Pcs: Stone.Pcs,
-            CtWeight: Stone.CtWeight,
-            Price: Stone.Price
-        }))
-    };
+        let pricingEntry = {
+            MetalPrice: pricing.MetalPrice,
+            DiamondsPrice: pricing.DiamondsPrice,
+            TotalPrice: pricing.TotalPrice,
+            DiamondWeight: parseFloat(excelTableJson.DiamondWeight),
+            TotalPieces: excelTableJson.TotalPieces,
+            Loss: pricing.Client.Loss,
+            Labour: pricing.Client.Labour,
+            ExtraCharges: pricing.Client.ExtraCharges,
+            Duties: pricing.Client.Duties,
+            Metal: {
+                Weight: pricing.Metal.Weight,
+                Quality: pricing.Metal.Quality,
+                Type: pricing.Metal.Type
+            },
+            Stones: pricing.Stones.map(Stone => ({
+                Type: Stone.Type,
+                Color: Stone.Color,
+                Shape: Stone.Shape,
+                MmSize: Stone.MmSize,
+                SieveSize: Stone.SieveSize,
+                Weight: Stone.Weight,
+                Pcs: Stone.Pcs,
+                CtWeight: Stone.CtWeight,
+                Price: Stone.Price
+            }))
+        };
 
-    asset.Pricing = pricingEntry || null;
+        asset.Pricing = pricingEntry || null;
+    }
 
     // Push to the Coral array
     enquiry.Coral = enquiry.Coral || [];
@@ -316,7 +318,7 @@ async function handleCoralUpload(enquiry, files, version, userId) {
 
     // Add a status history entry for Coral upload
     const statusEntry = {
-        Status: 'Approval Pending',
+        Status: 'Design Approval Pending',
         Timestamp: new Date(),
         AddedBy: userId,
         Details: `Coral Version ${asset.Version} uploaded`
@@ -369,47 +371,49 @@ async function handleCadUpload(enquiry, files, version, userId) {
     }
 
     let excelTableJson = await handleExcelData(files.excel[0]);
-    excelTableJson.Stones = excelTableJson.Stones.map(stone => ({
-        ...stone,
-        Type: enquiry.StoneType, // Add StoneType from enquiry
-    }));
-    excelTableJson.Metal = {
-        Weight: excelTableJson.Metal.Weight || null,
-        Quality: enquiry.Metal.Quality || null,
-        Type: enquiry.Metal.Type || null
-    };
+    if (excelTableJson) {
+        excelTableJson.Stones = excelTableJson.Stones.map(stone => ({
+            ...stone,
+            Type: enquiry.StoneType, // Add StoneType from enquiry
+        }));
+        excelTableJson.Metal = {
+            Weight: excelTableJson.Metal.Weight || null,
+            Quality: enquiry.Metal.Quality || null,
+            Type: enquiry.Metal.Type || null
+        };
 
-    let pricing = await exports.calculatePricing(excelTableJson, enquiry.ClientId);
+        let pricing = await exports.calculatePricing(excelTableJson, enquiry.ClientId);
 
-    let pricingEntry = {
-        MetalPrice: pricing.MetalPrice,
-        DiamondsPrice: pricing.DiamondsPrice,
-        TotalPrice: pricing.TotalPrice,
-        DiamondWeight: parseFloat(excelTableJson.DiamondWeight),
-        TotalPieces: excelTableJson.TotalPieces,
-        Loss: pricing.Client.Loss,
-        Labour: pricing.Client.Labour,
-        ExtraCharges: pricing.Client.ExtraCharges,
-        Duties: pricing.Client.Duties,
-        Metal: {
-            Weight: pricing.Metal.Weight,
-            Quality: pricing.Metal.Quality,
-            Type: pricing.Metal.Type
-        },
-        Stones: pricing.Stones.map(Stone => ({
-            Type: Stone.Type,
-            Color: Stone.Color,
-            Shape: Stone.Shape,
-            MmSize: Stone.MmSize,
-            SieveSize: Stone.SieveSize,
-            Weight: Stone.Weight,
-            Pcs: Stone.Pcs,
-            CtWeight: Stone.CtWeight,
-            Price: Stone.Price
-        }))
-    };
+        let pricingEntry = {
+            MetalPrice: pricing.MetalPrice,
+            DiamondsPrice: pricing.DiamondsPrice,
+            TotalPrice: pricing.TotalPrice,
+            DiamondWeight: parseFloat(excelTableJson.DiamondWeight),
+            TotalPieces: excelTableJson.TotalPieces,
+            Loss: pricing.Client.Loss,
+            Labour: pricing.Client.Labour,
+            ExtraCharges: pricing.Client.ExtraCharges,
+            Duties: pricing.Client.Duties,
+            Metal: {
+                Weight: pricing.Metal.Weight,
+                Quality: pricing.Metal.Quality,
+                Type: pricing.Metal.Type
+            },
+            Stones: pricing.Stones.map(Stone => ({
+                Type: Stone.Type,
+                Color: Stone.Color,
+                Shape: Stone.Shape,
+                MmSize: Stone.MmSize,
+                SieveSize: Stone.SieveSize,
+                Weight: Stone.Weight,
+                Pcs: Stone.Pcs,
+                CtWeight: Stone.CtWeight,
+                Price: Stone.Price
+            }))
+        };
 
-    asset.Pricing = pricingEntry || null;
+        asset.Pricing = pricingEntry || null;
+    }
 
     // Push to the Cad array
     // If asset already exists, update it
@@ -422,7 +426,7 @@ async function handleCadUpload(enquiry, files, version, userId) {
 
     // Add a status history entry for Cad upload
     const statusEntry = {
-        Status: 'CAD Approval Pending',
+        Status: 'Design Approval Pending',
         Timestamp: new Date(),
         AddedBy: userId, // User ID from JWT token
         Details: `CAD Version ${asset.Version} uploaded`
@@ -477,6 +481,9 @@ async function handleReferenceImageUpload(enquiry, files, userId) {
 
 
 async function handleExcelData(file) {
+    if (!file || !file.buffer) {
+        return;
+    }
     const workbook = xlsx.read(file.buffer, { type: 'buffer' });
     const sheetName = workbook.SheetNames[0];
     const sheet = workbook.Sheets[sheetName];
@@ -543,6 +550,7 @@ exports.calculatePricing = async (pricingDetails, clientId) => {
     metalWeight = parseFloat(pricingDetails.Metal.Weight);
     metalQuality = pricingDetails.Metal.Quality;
     metalType = pricingDetails.Metal.Type;
+    let diamondPriceNotFound = false;
 
     const todaysMetalRates = await metalPricesService.getLatest();
 
@@ -602,6 +610,9 @@ exports.calculatePricing = async (pricingDetails, clientId) => {
     const { diamondsPrice, diamondWeight } = stones.reduce(
         (acc, stone) => {
             const ratePerStone = stone.Price;
+            if (ratePerStone === undefined || ratePerStone === null || ratePerStone <= 0) {
+                diamondPriceNotFound = true;
+            }
             acc.diamondsPrice += stone.Pcs * ratePerStone;
             acc.diamondWeight += stone.CtWeight;
             return acc;
@@ -618,7 +629,7 @@ exports.calculatePricing = async (pricingDetails, clientId) => {
     const totalPrice = subtotal + dutiesAmount;
     return {
         MetalPrice: parseFloat(metalPrice.toFixed(2)),
-        DiamondsPrice: parseFloat(diamondsPrice.toFixed(2)),
+        DiamondsPrice: diamondPriceNotFound ? 0 : parseFloat(diamondsPrice.toFixed(2)),
         TotalPrice: parseFloat(totalPrice.toFixed(2)),
         Metal: {
             Weight: metalWeight,
