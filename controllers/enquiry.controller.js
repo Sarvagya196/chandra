@@ -63,7 +63,7 @@ exports.updateAssets = async (req, res) => {
     const data = req.body;
     const userId = req.user._id;
 
-    if (!version) {
+    if (!version && type !== 'reference') {
         return res.status(400).json({ message: 'Version is required' });
     }
 

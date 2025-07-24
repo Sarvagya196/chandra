@@ -161,6 +161,15 @@ exports.updateAssetData = async (enquiryId, type, version, data, userId) => {
                     };
                     enquiry.StatusHistory.push(statusEntry);
                 }
+
+                if(data.Description && data.Id) {
+                    updatedCoral.Images = updatedCoral.Images.map(image => {
+                        if (image.Id === data.Id) {
+                            return { ...image, Description: data.Description };
+                        }
+                        return image;
+                    });
+                }
                 // Replace the item at the found index
                 enquiry.Coral[coralIndex] = updatedCoral;
             }
@@ -208,11 +217,33 @@ exports.updateAssetData = async (enquiryId, type, version, data, userId) => {
                     enquiry.StatusHistory.push(statusEntry);
                 }
 
+                if(data.Description && data.Id) {
+                    updatedCad.Images = updatedCad.Images.map(image => {
+                        if (image.Id === data.Id) {
+                            return { ...image, Description: data.Description };
+                        }
+                        return image;
+                    });
+                }
+
                 // Replace the item at the found index
                 enquiry.Cad[cadIndex] = updatedCad;
             }
             else {
                 throw new Error('Version not found in Cad');
+            }
+            break;
+        case 'reference':
+            if (!enquiry.ReferenceImages) {
+                break;
+            }
+            if(data.Description && data.Id) {
+                enquiry.ReferenceImages = enquiry.ReferenceImages.map(image => {
+                    if (image.Id === data.Id) {
+                        return { ...image, Description: data.Description };
+                    }
+                    return image;
+                });
             }
             break;
         default:
