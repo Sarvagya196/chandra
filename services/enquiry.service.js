@@ -128,8 +128,8 @@ exports.updateAssetData = async (enquiryId, type, version, data, userId) => {
                 const updatedCoral = enquiry.Coral[coralIndex];
 
                 if (data.IsApprovedVersion !== undefined && data.IsApprovedVersion !== null) {
+                    updatedCoral.IsApprovedVersion = data.IsApprovedVersion;
                     if (data.IsApprovedVersion === true) {
-                        updatedCoral.IsApprovedVersion = data.IsApprovedVersion;
                         statusEntry = {
                             Status: 'CAD',
                             Timestamp: new Date(),
@@ -144,7 +144,7 @@ exports.updateAssetData = async (enquiryId, type, version, data, userId) => {
                             Timestamp: new Date(),
                             AssignedTo: enquiry.StatusHistory?.at(-1)?.AssignedTo,
                             AddedBy: userId || 'System',
-                            Details: "Coral Rejected - Redo"
+                            Details: "Coral Rejected - Redo - " + data.ReasonForRejection ?? ""
                         };
                     }
                     enquiry.StatusHistory.push(statusEntry);
@@ -302,6 +302,7 @@ async function handleCoralUpload(enquiry, files, version, userId) {
             Quality: enquiry.Metal.Quality || null,
             Type: enquiry.Metal.Type || null
         };
+        excelTableJson.Quantity = enquiry.Quantity || 1;
 
         let pricing = await exports.calculatePricing(excelTableJson, enquiry.ClientId);
 
@@ -412,6 +413,7 @@ async function handleCadUpload(enquiry, files, version, userId) {
             Quality: enquiry.Metal.Quality || null,
             Type: enquiry.Metal.Type || null
         };
+        excelTableJson.Quantity = enquiry.Quantity || 1;
 
         let pricing = await exports.calculatePricing(excelTableJson, enquiry.ClientId);
 
@@ -576,11 +578,12 @@ async function handleExcelData(file) {
 
 exports.calculatePricing = async (pricingDetails, clientId) => {
     //TODO which metal is it-> take that as parameter
-    let loss, labour, extraCharges, duties, metalRate, stones, metalWeight, metalQuality, metalType, metalPrice;
+    let loss, labour, extraCharges, duties, metalRate, stones, metalWeight, metalQuality, metalType, metalPrice, quantity;
     stones = pricingDetails.Stones;
     metalWeight = parseFloat(pricingDetails.Metal.Weight);
     metalQuality = pricingDetails.Metal.Quality;
     metalType = pricingDetails.Metal.Type;
+    quantity = pricingDetails.Quantity || 1;
     let diamondPriceNotFound = false;
 
     const todaysMetalRates = await metalPricesService.getLatest();
@@ -655,7 +658,7 @@ exports.calculatePricing = async (pricingDetails, clientId) => {
     const lossFactor = loss / 100;
     metalPrice = metalWeight * ((metalRate * (1 + lossFactor)) + labour);
 
-    const subtotal = metalPrice + diamondsPrice + extraCharges;
+    const subtotal = ((metalPrice + diamondsPrice) * quantity) + extraCharges;
     const dutiesAmount = subtotal * (duties / 100);
     const totalPrice = subtotal + dutiesAmount;
     return {
