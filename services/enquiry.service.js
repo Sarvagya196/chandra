@@ -300,7 +300,7 @@ async function handleCoralUpload(enquiry, files, version, userId) {
         excelTableJson.Metal = {
             Weight: excelTableJson.Metal.Weight || null,
             Quality: enquiry.Metal.Quality || null,
-            Type: enquiry.Metal.Type || null
+            Color: enquiry.Metal.Color || null
         };
         excelTableJson.Quantity = enquiry.Quantity || 1;
 
@@ -319,7 +319,7 @@ async function handleCoralUpload(enquiry, files, version, userId) {
             Metal: {
                 Weight: pricing.Metal.Weight,
                 Quality: pricing.Metal.Quality,
-                Type: pricing.Metal.Type
+                Color: pricing.Metal.Color
             },
             Stones: pricing.Stones.map(Stone => ({
                 Type: Stone.Type,
@@ -411,7 +411,7 @@ async function handleCadUpload(enquiry, files, version, userId) {
         excelTableJson.Metal = {
             Weight: excelTableJson.Metal.Weight || null,
             Quality: enquiry.Metal.Quality || null,
-            Type: enquiry.Metal.Type || null
+            Color: enquiry.Metal.Color || null
         };
         excelTableJson.Quantity = enquiry.Quantity || 1;
 
@@ -430,7 +430,7 @@ async function handleCadUpload(enquiry, files, version, userId) {
             Metal: {
                 Weight: pricing.Metal.Weight,
                 Quality: pricing.Metal.Quality,
-                Type: pricing.Metal.Type
+                Color: pricing.Metal.Color
             },
             Stones: pricing.Stones.map(Stone => ({
                 Type: Stone.Type,
@@ -578,33 +578,30 @@ async function handleExcelData(file) {
 
 exports.calculatePricing = async (pricingDetails, clientId) => {
     //TODO which metal is it-> take that as parameter
-    let loss, labour, extraCharges, duties, metalRate, stones, metalWeight, metalQuality, metalType, metalPrice, quantity;
+    let loss, labour, extraCharges, duties, metalRate, stones, metalWeight, metalQuality, metalColor, metalPrice, quantity;
     stones = pricingDetails.Stones;
     metalWeight = parseFloat(pricingDetails.Metal.Weight);
     metalQuality = pricingDetails.Metal.Quality;
-    metalType = pricingDetails.Metal.Type;
+    metalColor = pricingDetails.Metal.Color;
     quantity = pricingDetails.Quantity || 1;
     let diamondPriceNotFound = false;
 
     const todaysMetalRates = await metalPricesService.getLatest();
 
     // Determine metal rate
-    if (pricingDetails.Metal.Type === "Silver") {
+    if (pricingDetails.Metal.Quality === "Silver") {
         metalRate = todaysMetalRates.silver.price;
-    } else if (pricingDetails.Metal.Type === "Platinum") {
+    } else if (pricingDetails.Metal.Quality === "Platinum") {
         metalRate = todaysMetalRates.platinum.price;
     } else {
         const goldRate = todaysMetalRates.gold.price;
-        if (pricingDetails.Metal.Quality === "10K") {
-            metalRate = (goldRate * 10) / 24; // 10K Gold
-        } else if (pricingDetails.Metal.Quality === "14K") {
-            metalRate = (goldRate * 14) / 24; // 14K Gold
-        } else if (pricingDetails.Metal.Quality === "18K") {
-            metalRate = (goldRate * 18) / 24; // 18K Gold
-        } else if (pricingDetails.Metal.Quality === "22K") {
-            metalRate = (goldRate * 22) / 24; // 22K Gold
-        } else if (pricingDetails.Metal.Quality === "24K") {
-            metalRate = goldRate; // 24K Gold
+        const quality = pricingDetails.Metal.Quality?.toUpperCase();
+        const match = quality?.match(/^(\d{1,2})K$/);
+        if (match) {
+        const karat = parseInt(match[1], 10);
+        metalRate = (goldRate * karat) / 24;
+        } else {
+        throw new Error(`Invalid gold quality: ${quality}`);
         }
     }
 
@@ -668,7 +665,7 @@ exports.calculatePricing = async (pricingDetails, clientId) => {
         Metal: {
             Weight: metalWeight,
             Quality: metalQuality,
-            Type: metalType
+            Color: metalColor
         },
         DiamondWeight: diamondWeight,
         TotalPieces: pricingDetails.TotalPieces,

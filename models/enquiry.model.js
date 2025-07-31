@@ -14,7 +14,7 @@ const mongoose = require('mongoose');
 
   const MetalSchema = new mongoose.Schema({
     Weight: Number,
-    Type: String,
+    Color: String,
     Quality: String,
   }, { _id: false });
 
@@ -50,7 +50,7 @@ const enquirySchema = new mongoose.Schema({
     }],
     Priority: String,
     Metal: {
-        Type: String,
+        Color: String,
         Quality: String
     },
     Category: String,
