@@ -531,9 +531,9 @@ async function handleExcelData(file) {
     for (const row of jsonData) {
         index++;
         const Color = row['DIA/COL']?.toString().trim();
-        const Shape = row['ST Shape']?.toString().trim();
-        const MmSize = parseFloat(row['MM Size']) || 0;
-        const SieveSize = row['Sieve Size']?.toString().trim();
+        const Shape = row['ST SHAPE']?.toString().trim();
+        const MmSize = parseFloat(row['MM SIZE']) || 0;
+        const SieveSize = row['SIEVE SIZE']?.toString().trim();
         const Weight = parseFloat(row['AVRG WT']) || 0;
         const Pcs = parseInt(row['PCS']) || 0;
         const CtWeight = parseFloat(row['CT WT']) || 0;
@@ -555,13 +555,13 @@ async function handleExcelData(file) {
         }
 
         // Extract goldWeight if present
-        if (!metalWeight && row['Metal Weight']) {
-            metalWeight = row['Metal Weight'].toString().trim();
+        if (!metalWeight && row['METAL WEIGHT']) {
+            metalWeight = row['METAL WEIGHT'].toString().trim();
         }
 
         // Extract diamondWeight if present (optional)
-        if (!diamondWeight && row['t.dIA wt']) {
-            diamondWeight = row['t.dIA wt'].toString().trim();
+        if (!diamondWeight && row['T.DIA WT']) {
+            diamondWeight = row['T.DIA WT'].toString().trim();
         }
     }
 
