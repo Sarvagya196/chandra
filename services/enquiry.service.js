@@ -638,11 +638,11 @@ exports.calculatePricing = async (pricingDetails, clientId) => {
     // Calculate Diamonds Price
     const { diamondsPrice, diamondWeight } = stones.reduce(
         (acc, stone) => {
-            const ratePerStone = stone.Price;
-            if (ratePerStone === undefined || ratePerStone === null || ratePerStone <= 0) {
+            const ratePerCaratOfStone = stone.Price;
+            if (ratePerCaratOfStone === undefined || ratePerCaratOfStone === null || ratePerCaratOfStone <= 0) {
                 diamondPriceNotFound = true;
             }
-            acc.diamondsPrice += stone.Pcs * ratePerStone;
+            acc.diamondsPrice += stone.CtWeight * ratePerCaratOfStone;
             acc.diamondWeight += stone.CtWeight;
             return acc;
         },
