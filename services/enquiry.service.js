@@ -622,10 +622,8 @@ exports.calculatePricing = async (pricingDetails, clientId) => {
         stones = stones.map(stone => {
             const matchingDiamond = client.Pricing.Diamonds.find(diamond =>
                 diamond.Type === stone.Type &&
-                diamond.SieveSize === stone.SieveSize &&
                 diamond.Shape === stone.Shape &&
-                Number(diamond.MmSize) === Number(stone.MmSize) &&
-                Number(diamond.Carat) == Number(stone.Weight)
+                Number(diamond.MmSize) === Number(stone.MmSize)
             );
 
             const Price = matchingDiamond ? matchingDiamond.Price ?? 0 : 0;
