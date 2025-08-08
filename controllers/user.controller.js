@@ -6,7 +6,8 @@ exports.getUsers = async (req, res) => {
 
       const filteredUsers = users.map(user => ({
         Id: user._id,
-        Name: user.name
+        Name: user.name,
+        Role: user.role
       }));
   
       res.json(filteredUsers);

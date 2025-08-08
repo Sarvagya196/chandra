@@ -5,6 +5,7 @@ const metalPricesService = require("../services/metalPrices.service");
 const { uploadToS3, generatePresignedUrl } = require('../utils/s3');
 const { v4: uuidv4 } = require('uuid');
 const xlsx = require('xlsx');
+const { getIO } = require('../utils/socket');
 
 
 // Get all enquiries
@@ -43,6 +44,15 @@ exports.createEnquiry = async (data, userId) => {
     };
 
     const enquiry = await repo.createEnquiry(enquiryData);
+    if(AssignedTo) {
+        const io = getIO();
+        // TODO add link here to item
+        io.to(`user_${AssignedTo}`).emit('messageNotification', {
+            type: 'assignment',
+            message: `You've been assigned enquiry #${enquiry._id}.`,
+            timestamp: new Date(),
+        });
+    }
 
     return enquiry._id;
 };
