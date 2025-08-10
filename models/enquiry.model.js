@@ -28,6 +28,7 @@ const mongoose = require('mongoose');
     Duties: { type: Number, default: 0 },
     DiamondWeight: Number,
     TotalPieces: Number,
+    UndercutPrice: { type: Boolean, default: false },
     Stones: {
       type: [StoneSchema]
     },

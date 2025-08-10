@@ -588,7 +588,8 @@ async function handleExcelData(file) {
 
 exports.calculatePricing = async (pricingDetails, clientId) => {
     //TODO which metal is it-> take that as parameter
-    let loss, labour, extraCharges, duties, metalRate, stones, metalWeight, metalQuality, metalColor, metalPrice, quantity;
+    let loss, labour, extraCharges, duties, metalRate, stones, metalWeight, metalQuality, metalColor, metalPrice, quantity, undercutPrice;
+    undercutPrice = pricingDetails.UndercutPrice;
     stones = pricingDetails.Stones;
     metalWeight = parseFloat(pricingDetails.Metal.Weight);
     metalQuality = pricingDetails.Metal.Quality;
@@ -663,8 +664,17 @@ exports.calculatePricing = async (pricingDetails, clientId) => {
     const lossFactor = loss / 100;
     metalPrice = metalWeight * ((metalRate * (1 + lossFactor)) + labour);
 
-    const subtotal = ((metalPrice + diamondsPrice) * quantity) + extraCharges;
-    const dutiesAmount = subtotal * (duties / 100);
+    let undercutDiamondsPrice = 0;
+    if(undercutPrice) {
+        undercutDiamondsPrice = stones.reduce((acc, stone) => {
+            const ratePerCaratOfStone = stone.Price;
+            acc + ratePerCaratOfStone > 210 ? 210 : (stone.CtWeight * ratePerCaratOfStone);
+            return acc;
+        }, 0);
+    }
+    const subtotal = ((metalPrice + (undercutPrice ? undercutDiamondsPrice : diamondsPrice)) * quantity) + extraCharges;
+    let dutiesAmount = subtotal * (duties / 100);
+
     const totalPrice = subtotal + dutiesAmount;
     return {
         MetalPrice: parseFloat(metalPrice.toFixed(2)),
