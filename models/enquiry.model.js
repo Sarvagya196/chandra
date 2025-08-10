@@ -68,6 +68,8 @@ const enquirySchema = new mongoose.Schema({
     Stamping: String,
     Remarks: String,
     ShippingDate: Date,
+    CadCode: String,
+    CoralCode: String,
     ReferenceImages: [{
         Id: String,
         Key: String,
