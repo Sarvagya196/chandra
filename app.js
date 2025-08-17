@@ -7,6 +7,7 @@ const http = require('http');
 const connectDB = require('./config/db');
 const routes = require('./routes');
 const initSocket = require('./utils/socket'); // 🧠 Import socket logic
+const pushService = require('./services/pushNotification.service');
 
 const app = express();
 const server = http.createServer(app);
@@ -33,6 +34,11 @@ const startApp = async () => {
 
   // Start WebSocket server
   initSocket(server);
+  pushService.initPushService(
+    process.env.VAPID_PUBLIC_KEY,
+    process.env.VAPID_PRIVATE_KEY,
+    process.env.GMAIL_USER
+  );
 
   // Start HTTP server
   const PORT = process.env.PORT || 5000;

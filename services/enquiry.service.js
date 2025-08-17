@@ -6,7 +6,10 @@ const { uploadToS3, generatePresignedUrl } = require('../utils/s3');
 const { v4: uuidv4 } = require('uuid');
 const xlsx = require('xlsx');
 const { getIO } = require('../utils/socket');
+const pushService = require('../services/pushNotification.service');
+const sendMail = require('../utils/email').sendMail;
 
+let frontendUrl = process.env.NODE_ENV === 'production' ? 'https://workflow-ui-virid.vercel.app' : 'http://localhost:4200';
 
 // Get all enquiries
 exports.getEnquiries = async () => {
@@ -45,13 +48,46 @@ exports.createEnquiry = async (data, userId) => {
 
     const enquiry = await repo.createEnquiry(enquiryData);
     if(AssignedTo) {
-        const io = getIO();
-        // TODO add link here to item
-        io.to(`user_${AssignedTo}`).emit('messageNotification', {
-            type: 'assignment',
-            message: `You've been assigned enquiry #${enquiry._id}.`,
-            timestamp: new Date(),
-        });
+        // const io = getIO();
+        // // TODO add link here to item
+        // io.to(`user_${AssignedTo}`).emit('messageNotification', {
+        //     type: 'assignment',
+        //     message: `You've been assigned enquiry #${enquiry._id}.`,
+        //     timestamp: new Date(),
+        // });
+
+        // Also send push notification
+        this.handleEnquiryParticipants(enquiry._id, AssignedTo, false);
+        const subscription = await pushService.getSubscription(AssignedTo);
+        if (subscription) {
+            try {
+                await pushService.sendPush(AssignedTo, {
+                    title: `New enquiry assigned`,
+                    body: `You've been assigned enquiry #${enquiry._id}.`,
+                    url: `${frontendUrl}/enquiries/${enquiry._id}`
+                });
+            } catch (err) {
+                console.error(`Failed to push to user ${AssignedTo}`, err);
+            }
+        }
+
+        // Also send email notification always
+        const assignedUser = await userService.getUserById(AssignedTo);
+        if (!assignedUser || !assignedUser.email) {
+            console.warn(`No email for user ${AssignedTo}, skipping email notification`);
+            return enquiry._id;
+        }
+        await sendMail(
+            assignedUser.email,
+            `New enquiry assigned #${enquiry._id}`,
+            `
+                <p>Hello ${assignedUser.name || ''},</p>
+                <p>You have been assigned a new enquiry <b>#${enquiry._id}</b>.</p>
+                <p><a href="${frontendUrl}/enquiries/${enquiry._id}">View Enquiry</a></p>
+            `,
+            `New enquiry assigned #${enquiry._id}`
+        );
+
     }
 
     return enquiry._id;
@@ -92,6 +128,32 @@ exports.updateEnquiry = async (id, data, userId) => {
         let oldAssignee = await userService.getUserById(oldStatusHistory.AssignedTo);
         let newAssignee = await userService.getUserById(data.AssignedTo);
         changes.push(`Assigned: from "${oldAssignee?.name}" to "${newAssignee?.name}"`);
+
+        // Notify the new assignee via socket
+        // const io = getIO();
+        if (newAssignee._id) {
+            // TODO
+            // io.to(`user_${newAssignee._id}`).emit('messageNotification', {
+            //     type: 'Updated',
+            //     message: `Enquiry #${id}. has updates. Click to check.`,
+            //     timestamp: new Date(),
+            // });
+            // Also send push notification
+            this.handleEnquiryParticipants(enquiry._id, newAssignee._id, false);
+            const subscription = await pushService.getSubscription(newAssignee._id);
+            if (subscription) {
+                try {
+                    await pushService.sendPush(newAssignee._id, {
+                        title: `Enquiry Updated`,
+                        body: `Enquiry #${id}. has updates. Click to check.`,
+                        url: `${frontendUrl}/enquiries/${id}`
+                    });
+                } catch (err) {
+                    console.error(`Failed to push to user ${newAssignee._id}`, err);
+                }
+            }
+        }
+
     }
 
     if (changes.length > 0) {
@@ -263,6 +325,42 @@ exports.updateAssetData = async (enquiryId, type, version, data, userId) => {
     // Save the updated enquiry
     return await repo.updateEnquiry(enquiryId, enquiry);
 };
+
+exports.handleEnquiryParticipants = async (enquiryId, userId, toAdd) => {
+    const enquiry = await repo.getEnquiryById(enquiryId);
+    if (!enquiry) throw new Error('Enquiry not found');
+
+    if (!Array.isArray(enquiry.Participants)) {
+        enquiry.Participants = [];
+    }
+
+    if (toAdd) {
+        // Add or update participant with active = true
+        const existing = enquiry.Participants.find(p => p.UserId === userId);
+        if (existing) {
+            existing.IsActive = true;
+        } else {
+            enquiry.Participants.push({ UserId: userId, IsActive: true });
+        }
+    } else {
+        // Instead of removing, just mark active = false
+        const existing = enquiry.Participants.find(p => p.UserId === userId);
+        if (existing) {
+            existing.IsActive = false;
+        } else {
+            // optional: if not found, still add as inactive
+            enquiry.Participants.push({ UserId: userId, IsActive: false });
+        }
+    }
+
+    await repo.updateEnquiry(enquiryId, enquiry);
+};
+
+exports.getEnquiryParticipants = async (enquiryId) => {
+    const enquiry = await repo.getEnquiryById(enquiryId);
+    if (!enquiry) throw new Error('Enquiry not found');
+    return enquiry.Participants || [];
+}
 
 
 async function handleCoralUpload(enquiry, files, version, userId) {
