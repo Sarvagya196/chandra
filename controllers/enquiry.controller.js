@@ -42,6 +42,19 @@ exports.updateEnquiry = async (req, res) => {
     }
 };
 
+exports.deleteEnquiry = async (req, res) => {
+    try {
+        await service.deleteEnquiry(req.params.id);
+        res.status(204).send();
+    } catch (error) {
+        console.error("Error deleting enquiry:", error);
+        if (error.message === 'Enquiry not found') {
+            return res.status(404).json({ message: "Enquiry not found" });
+        }
+        res.status(500).json({ message: "Internal server error" });
+    }
+};
+
 exports.uploadAssets = async (req, res) => {
     const { id, type } = req.params;
     const files = req.files;

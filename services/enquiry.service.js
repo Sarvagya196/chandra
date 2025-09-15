@@ -93,6 +93,13 @@ exports.createEnquiry = async (data, userId) => {
     return enquiry._id;
 };
 
+exports.deleteEnquiry = async (id) => {
+    const deleted = await repo.deleteEnquiry(id);
+    if (!deleted) {
+        throw new Error('Enquiry not found');
+    }
+    return deleted;
+}
 
 exports.updateEnquiry = async (id, data, userId) => {
     const enquiry = await repo.getEnquiryById(id);
