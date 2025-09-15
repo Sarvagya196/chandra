@@ -16,6 +16,9 @@ router.post('/', authenticateToken, controller.createEnquiry);
 // PUT update an enquiry by ID
 router.put('/:id', authenticateToken, controller.updateEnquiry);
 
+// DELETE an enquiry by ID
+router.delete('/:id', enquiryController.deleteEnquiry);
+
 // Upload assets (coral, cad, reference)
 router.post(
     '/:id/upload/:type',
