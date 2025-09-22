@@ -772,10 +772,9 @@ exports.calculatePricing = async (pricingDetails, clientId) => {
     let undercutDiamondsPrice = 0;
     if(undercutPrice) {
         undercutDiamondsPrice = stones.reduce((acc, stone) => {
-            const ratePerCaratOfStone = stone.Price;
-            acc + ratePerCaratOfStone > 210 ? 210 : (stone.CtWeight * ratePerCaratOfStone);
-            return acc;
-        }, 0);
+        const ratePerCaratOfStone = stone.Price > 210 ? 210 : stone.Price;
+        return acc + (stone.CtWeight * ratePerCaratOfStone);
+      }, 0);
     }
     const subtotal = ((metalPrice + (undercutPrice ? undercutDiamondsPrice : diamondsPrice)) * quantity) + extraCharges;
     let dutiesAmount = subtotal * (duties / 100);
