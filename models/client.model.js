@@ -4,7 +4,7 @@ const DiamondSchema = new mongoose.Schema({
     Type: { type: String },
     Shape: { type: String },
     Carat: {type: Number},
-    MmSize: { type: Number },
+    MmSize: { type: String },
     SieveSize: { type: String},
     Price: { type: Number }
   }, { _id: false });

@@ -422,9 +422,9 @@ async function handleCoralUpload(enquiry, files, version, userId) {
         let pricing = await exports.calculatePricing(excelTableJson, enquiry.ClientId);
 
         let pricingEntry = {
-            MetalPrice: pricing.MetalPrice,
-            DiamondsPrice: pricing.DiamondsPrice,
-            TotalPrice: pricing.TotalPrice,
+            MetalPrice: parseFloat(pricing.MetalPrice),
+            DiamondsPrice: parseFloat(pricing.DiamondsPrice),
+            TotalPrice: parseFloat(pricing.TotalPrice),
             DiamondWeight: parseFloat(excelTableJson.DiamondWeight),
             TotalPieces: excelTableJson.TotalPieces,
             Loss: pricing.Client.Loss,
@@ -434,7 +434,8 @@ async function handleCoralUpload(enquiry, files, version, userId) {
             Metal: {
                 Weight: pricing.Metal.Weight,
                 Quality: pricing.Metal.Quality,
-                Color: pricing.Metal.Color
+                Color: pricing.Metal.Color,
+                Rate: pricing.Metal.Rate
             },
             Stones: pricing.Stones.map(Stone => ({
                 Type: Stone.Type,
@@ -545,7 +546,8 @@ async function handleCadUpload(enquiry, files, version, userId) {
             Metal: {
                 Weight: pricing.Metal.Weight,
                 Quality: pricing.Metal.Quality,
-                Color: pricing.Metal.Color
+                Color: pricing.Metal.Color,
+                Rate: pricing.Metal.Rate
             },
             Stones: pricing.Stones.map(Stone => ({
                 Type: Stone.Type,
@@ -647,11 +649,11 @@ async function handleExcelData(file) {
         index++;
         const Color = row['DIA/COL']?.toString().trim();
         const Shape = row['ST SHAPE']?.toString().trim();
-        const MmSize = parseFloat(row['MM SIZE']) || 0;
+        const MmSize = row['MM SIZE']?.toString().trim();
         const SieveSize = row['SIEVE SIZE']?.toString().trim();
         const Weight = parseFloat(row['AVRG WT']) || 0;
         const Pcs = parseInt(row['PCS']) || 0;
-        const CtWeight = parseFloat(row['CT WT']) || 0;
+        const CtWeight = row['CT WT']? parseFloat(parseFloat(row['CT WT']).toFixed(3)) : 0;
 
         // Accumulate total pieces
         totalPieces += Pcs;
@@ -693,7 +695,7 @@ async function handleExcelData(file) {
 
 exports.calculatePricing = async (pricingDetails, clientId) => {
     //TODO which metal is it-> take that as parameter
-    let loss, labour, extraCharges, duties, metalRate, stones, metalWeight, metalQuality, metalColor, metalPrice, quantity, undercutPrice;
+    let loss, labour, extraCharges, duties, metalRate, metalFullRate, stones, metalWeight, metalQuality, metalColor, metalPrice, quantity, undercutPrice;
     undercutPrice = pricingDetails.UndercutPrice;
     stones = pricingDetails.Stones;
     metalWeight = parseFloat(pricingDetails.Metal.Weight);
@@ -707,10 +709,13 @@ exports.calculatePricing = async (pricingDetails, clientId) => {
     // Determine metal rate
     if (pricingDetails.Metal.Quality === "Silver") {
         metalRate = todaysMetalRates.silver.price;
+        metalFullRate = todaysMetalRates.silver.price;
     } else if (pricingDetails.Metal.Quality === "Platinum") {
         metalRate = todaysMetalRates.platinum.price;
+        metalFullRate = todaysMetalRates.platinum.price;
     } else {
         const goldRate = todaysMetalRates.gold.price;
+        metalFullRate = goldRate;
         const quality = pricingDetails.Metal.Quality?.toUpperCase();
         const match = quality?.match(/^(\d{1,2})K$/);
         if (match) {
@@ -739,7 +744,7 @@ exports.calculatePricing = async (pricingDetails, clientId) => {
             const matchingDiamond = client.Pricing.Diamonds.find(diamond =>
                 diamond.Type === stone.Type &&
                 diamond.Shape === stone.Shape &&
-                Number(diamond.MmSize) === Number(stone.MmSize)
+                diamond.MmSize.trim() === stone.MmSize.trim()
             );
 
             const Price = matchingDiamond ? matchingDiamond.Price ?? 0 : 0;
@@ -767,7 +772,7 @@ exports.calculatePricing = async (pricingDetails, clientId) => {
 
     // Calculate Metal Price
     const lossFactor = loss / 100;
-    metalPrice = metalWeight * ((metalRate * (1 + lossFactor)) + labour);
+    metalPrice = parseFloat(metalWeight * ((metalRate * (1 + lossFactor)) + labour).toFixed(3));
 
     let undercutDiamondsPrice = 0;
     if(undercutPrice) {
@@ -776,20 +781,32 @@ exports.calculatePricing = async (pricingDetails, clientId) => {
         return acc + (stone.CtWeight * ratePerCaratOfStone);
       }, 0);
     }
-    const subtotal = ((metalPrice + (undercutPrice ? undercutDiamondsPrice : diamondsPrice)) * quantity) + extraCharges;
-    let dutiesAmount = subtotal * (duties / 100);
+    // console.log("Undercut Price:", undercutDiamondsPrice);
+    // console.log("Diamonds Price:", diamondsPrice, typeof diamondsPrice);
+    // console.log("Metal Price:", metalPrice, typeof metalPrice);
 
-    const totalPrice = subtotal + dutiesAmount;
+    const subtotal = ((metalPrice + (undercutPrice ? undercutDiamondsPrice : diamondsPrice)) * quantity) + extraCharges;
+    // console.log("Subtotal:", subtotal);
+    let dutiesAmount = subtotal * (duties / 100);
+    // console.log("Duties Amount:", dutiesAmount);
+
+    // console.log("Metal Price:", metalPrice);
+    // console.log("Diamonds Price:", diamondsPrice);
+    // console.log("Duties Amount:", dutiesAmount);
+
+    const totalPrice = ((metalPrice +  diamondsPrice) * quantity) + extraCharges + dutiesAmount;
+    // console.log("Total Price after calc:", totalPrice);
     return {
-        MetalPrice: parseFloat(metalPrice.toFixed(2)),
-        DiamondsPrice: diamondPriceNotFound ? 0 : parseFloat(diamondsPrice.toFixed(2)),
-        TotalPrice: parseFloat(totalPrice.toFixed(2)),
+        MetalPrice: parseFloat(metalPrice).toFixed(3),
+        DiamondsPrice: diamondPriceNotFound ? 0 : parseFloat(diamondsPrice).toFixed(3),
+        TotalPrice: parseFloat(totalPrice).toFixed(3),
         Metal: {
             Weight: metalWeight,
             Quality: metalQuality,
-            Color: metalColor
+            Color: metalColor,
+            Rate: parseFloat(metalFullRate).toFixed(3)
         },
-        DiamondWeight: diamondWeight,
+        DiamondWeight: diamondWeight?.toFixed(3),
         TotalPieces: pricingDetails.TotalPieces,
         Client: {
             ExtraCharges: extraCharges,

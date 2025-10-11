@@ -16,6 +16,7 @@ const mongoose = require('mongoose');
     Weight: Number,
     Color: String,
     Quality: String,
+    Rate: Number
   }, { _id: false });
 
   const PricingSchema = new mongoose.Schema({
