@@ -22,5 +22,6 @@ exports.deleteEnquiry = async (id) => {
 
 // Update an existing enquiry by _id and return the updated doc
 exports.updateEnquiry = async (id, updatedEnquiry) => {
-    return await Enquiry.findByIdAndUpdate(id, updatedEnquiry, { new: true });
+  const result = await Enquiry.replaceOne({ _id: id }, updatedEnquiry);
+  return result;
 };
