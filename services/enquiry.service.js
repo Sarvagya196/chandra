@@ -2,6 +2,7 @@ const repo = require('../repositories/enquiry.repo');
 const userService = require("../services/user.service");
 const clientService = require("../services/client.service");
 const metalPricesService = require("../services/metalPrices.service");
+const chatService = require('../services/chat.service');
 const { uploadToS3, generatePresignedUrl } = require('../utils/s3');
 const { v4: uuidv4 } = require('uuid');
 const xlsx = require('xlsx');
@@ -94,12 +95,22 @@ exports.createEnquiry = async (data, userId) => {
 };
 
 exports.deleteEnquiry = async (id) => {
-    const deleted = await repo.deleteEnquiry(id);
-    if (!deleted) {
-        throw new Error('Enquiry not found');
+    try {
+        // 1️⃣ Delete the enquiry
+        const deleted = await repo.deleteEnquiry(id);
+        if (!deleted) {
+            throw new Error('Enquiry not found');
+        }
+
+        // 2️⃣ Delete all related messages
+        await chatService.deleteMessages(id);
+
+        // 3️⃣ Return the deleted enquiry
+        return deleted;
+    } catch (err) {
+        throw new Error('Error deleting enquiry: ' + err.message);
     }
-    return deleted;
-}
+};
 
 exports.updateEnquiry = async (id, data, userId) => {
     const enquiry = await repo.getEnquiryById(id);
@@ -229,7 +240,6 @@ exports.updateAssetData = async (enquiryId, type, version, data, userId) => {
                     enquiry.StatusHistory.push(statusEntry);
                 }
 
-                // console.log("data pricing: ", data.Pricing);
                 if (data.Pricing !== undefined && data.Pricing !== null) {
                     updatedCoral.Pricing = data.Pricing;
                     statusEntry = {
@@ -252,7 +262,6 @@ exports.updateAssetData = async (enquiryId, type, version, data, userId) => {
                 }
                 // Replace the item at the found index
                 enquiry.Coral[coralIndex] = updatedCoral;
-                // console.log("enquiry coral after update: ", enquiry.Coral[coralIndex]);
             }
             else {
                 throw new Error('Version not found in Coral');
@@ -337,6 +346,7 @@ exports.updateAssetData = async (enquiryId, type, version, data, userId) => {
 
 exports.handleEnquiryParticipants = async (enquiryId, userId, toAdd) => {
     const enquiry = await repo.getEnquiryById(enquiryId);
+    console.log("enquiry in handle enquiry : ", )
     if (!enquiry) throw new Error('Enquiry not found');
 
     if (!Array.isArray(enquiry.Participants)) {
@@ -784,21 +794,12 @@ exports.calculatePricing = async (pricingDetails, clientId) => {
         return acc + (stone.CtWeight * ratePerCaratOfStone);
       }, 0);
     }
-    // console.log("Undercut Price:", undercutDiamondsPrice);
-    // console.log("Diamonds Price:", diamondsPrice, typeof diamondsPrice);
-    // console.log("Metal Price:", metalPrice, typeof metalPrice);
 
     const subtotal = ((metalPrice + (undercutPrice ? undercutDiamondsPrice : diamondsPrice)) * quantity) + extraCharges;
-    // console.log("Subtotal:", subtotal);
     let dutiesAmount = subtotal * (duties / 100);
-    // console.log("Duties Amount:", dutiesAmount);
-
-    // console.log("Metal Price:", metalPrice);
-    // console.log("Diamonds Price:", diamondsPrice);
-    // console.log("Duties Amount:", dutiesAmount);
 
     const totalPrice = ((metalPrice +  diamondsPrice) * quantity) + extraCharges + dutiesAmount;
-    // console.log("Total Price after calc:", totalPrice);
+
     return {
         MetalPrice: parseFloat(metalPrice).toFixed(3),
         DiamondsPrice: diamondPriceNotFound ? 0 : parseFloat(diamondsPrice).toFixed(3),

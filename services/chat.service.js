@@ -17,6 +17,15 @@ exports.getMessages = async (enquiryId) => {
     }
 }
 
+//Delete all messages for an enquiry
+exports.deleteMessages = async (enquiryId) => {
+    try {
+        return await repo.deleteMessages(enquiryId);
+    } catch (err) {
+        throw new Error('Error deleting messages: ' + err.message);
+    }
+};
+
 exports.uploadMedia = async (file) => {
     return await uploadToS3(file);
 }

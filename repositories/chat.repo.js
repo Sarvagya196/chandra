@@ -15,3 +15,13 @@ exports.getMessages = async (enquiryId) => {
         throw new Error('Error fetching messages: ' + error.message);
     }
 }
+
+//Delete all messages for an enquiry
+exports.deleteMessages = async (enquiryId) => {
+    try {
+        const result = await Message.deleteMany({ enquiryId });
+        return result;
+    } catch (err) {
+        throw new Error('Error deleting messages: ' + err.message);
+    }
+};
