@@ -788,14 +788,14 @@ exports.calculatePricing = async (pricingDetails, clientId) => {
     metalPrice = parseFloat(metalWeight * ((metalRate * (1 + lossFactor)) + labour).toFixed(3));
 
     let undercutDiamondsPrice = 0;
-    if(undercutPrice) {
+    if(undercutPrice > 0) {
         undercutDiamondsPrice = stones.reduce((acc, stone) => {
-        const ratePerCaratOfStone = stone.Price > 210 ? 210 : stone.Price;
+        const ratePerCaratOfStone = stone.Price > undercutPrice ? undercutPrice : stone.Price;
         return acc + (stone.CtWeight * ratePerCaratOfStone);
       }, 0);
     }
 
-    const subtotal = ((metalPrice + (undercutPrice ? undercutDiamondsPrice : diamondsPrice)) * quantity) + extraCharges;
+    const subtotal = ((metalPrice + (undercutPrice > 0 ? undercutDiamondsPrice : diamondsPrice)) * quantity) + extraCharges;
     let dutiesAmount = subtotal * (duties / 100);
 
     const totalPrice = ((metalPrice +  diamondsPrice) * quantity) + extraCharges + dutiesAmount;

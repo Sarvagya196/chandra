@@ -30,7 +30,7 @@ const mongoose = require('mongoose');
     DiamondWeight: Number,
     TotalPieces: Number,
     ClientPricingMessage: { type: String, default: null },
-    UndercutPrice: { type: Boolean, default: false },
+    UndercutPrice: { type: Number, default: 0 },
     Stones: {
       type: [StoneSchema]
     },
