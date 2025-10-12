@@ -29,12 +29,12 @@ const mongoose = require('mongoose');
     Duties: { type: Number, default: 0 },
     DiamondWeight: Number,
     TotalPieces: Number,
+    ClientPricingMessage: { type: String, default: null },
     UndercutPrice: { type: Boolean, default: false },
     Stones: {
       type: [StoneSchema]
     },
     Metal: MetalSchema,
-    Message: String,
   }, { _id: false });
 
 const enquirySchema = new mongoose.Schema({
@@ -97,7 +97,7 @@ const enquirySchema = new mongoose.Schema({
             type: PricingSchema
         },
         IsApprovedVersion: Boolean,
-        CreatedDate: Date
+        CreatedDate: { type: Date, default: Date.now }
     }],
     Cad: [{
         Version: String,
@@ -115,7 +115,9 @@ const enquirySchema = new mongoose.Schema({
         Pricing: {
             type: PricingSchema
         },
-        IsFinalVersion: Boolean
+        ClientPricingMessage: String,
+        IsFinalVersion: Boolean,
+        CreatedDate: { type: Date, default: Date.now }
     }]
 });
 

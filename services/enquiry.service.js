@@ -229,6 +229,7 @@ exports.updateAssetData = async (enquiryId, type, version, data, userId) => {
                     enquiry.StatusHistory.push(statusEntry);
                 }
 
+                // console.log("data pricing: ", data.Pricing);
                 if (data.Pricing !== undefined && data.Pricing !== null) {
                     updatedCoral.Pricing = data.Pricing;
                     statusEntry = {
@@ -251,6 +252,7 @@ exports.updateAssetData = async (enquiryId, type, version, data, userId) => {
                 }
                 // Replace the item at the found index
                 enquiry.Coral[coralIndex] = updatedCoral;
+                // console.log("enquiry coral after update: ", enquiry.Coral[coralIndex]);
             }
             else {
                 throw new Error('Version not found in Coral');
@@ -493,6 +495,7 @@ async function handleCadUpload(enquiry, files, version, userId) {
             Version: assetVersion,
             Images: [],
             Excel: null,
+            Pricing: null,
             IsFinalVersion: false
         };
     }
