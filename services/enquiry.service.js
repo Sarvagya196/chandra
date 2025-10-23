@@ -260,8 +260,20 @@ exports.updateAssetData = async (enquiryId, type, version, data, userId) => {
                         return image;
                     });
                 }
-                // Replace the item at the found index
-                enquiry.Coral[coralIndex] = updatedCoral;
+
+                if(data.Delete === true) {
+                    if(data.Id) {
+                        updatedCoral.Images = updatedCoral.Images.filter(image => image.Id !== data.Id);
+                    } else {
+                        //delete entire version
+                        enquiry.Coral.splice(coralIndex, 1);
+                    }
+                }
+                
+                // Replace the item at the found index only if not deleting entire version
+                if(!(data.Delete === true && !data.Id)) {
+                    enquiry.Coral[coralIndex] = updatedCoral;
+                }
             }
             else {
                 throw new Error('Version not found in Coral');
@@ -316,8 +328,19 @@ exports.updateAssetData = async (enquiryId, type, version, data, userId) => {
                     });
                 }
 
-                // Replace the item at the found index
-                enquiry.Cad[cadIndex] = updatedCad;
+                if(data.Delete === true) {
+                    if(data.Id) {
+                        updatedCad.Images = updatedCad.Images.filter(image => image.Id !== data.Id);
+                    } else {
+                        //delete entire version
+                        enquiry.Cad.splice(cadIndex, 1);
+                    }
+                }
+
+                // Replace the item at the found index only if not deleting entire version
+                if(!(data.Delete === true && !data.Id)) {
+                    enquiry.Cad[cadIndex] = updatedCad;
+                }
             }
             else {
                 throw new Error('Version not found in Cad');
@@ -379,7 +402,6 @@ exports.getEnquiryParticipants = async (enquiryId) => {
     if (!enquiry) throw new Error('Enquiry not found');
     return enquiry.Participants || [];
 }
-
 
 async function handleCoralUpload(enquiry, files, version, userId) {
 
@@ -641,7 +663,6 @@ async function handleReferenceImageUpload(enquiry, files, userId) {
     return { _id: enquiry._id };
 }
 
-
 async function handleExcelDataForCoral(file) {
     if (!file || !file.buffer) {
         return;
@@ -663,7 +684,7 @@ async function handleExcelDataForCoral(file) {
         const SieveSize = row['SIEVE SIZE']?.toString().trim();
         const Weight = parseFloat(row['AVRG WT']) || 0;
         const Pcs = parseInt(row['PCS']) || 0;
-        const CtWeight = row['CT WT']? parseFloat(parseFloat(row['CT WT']).toFixed(3)) : 0;
+        const CtWeight = row['CT WT']? Math.trunc(parseFloat(row['CT WT']) * 1000) / 1000 : 0;
 
         // Accumulate total pieces
         totalPieces += Pcs;
@@ -726,7 +747,7 @@ async function handleExcelDataForCad(file) {
         const SieveSize = row['Size']?.toString().trim().match(/[\d.]+(?:-[\d.]+)?/)?.[0] || '';
         const Weight = parseFloat(row['AVRG WT']) || 0;
         const Pcs = parseInt(row['Pcs']) || 0;
-        const CtWeight = row['Weight']? parseFloat(parseFloat(row['Weight']).toFixed(3)) : 0;
+        const CtWeight = row['Weight']? Math.trunc(parseFloat(row['Weight']) * 1000) / 1000 : 0;
 
         if(index === 0 ) {
             metalWeight = CtWeight;
