@@ -267,6 +267,15 @@ exports.updateAssetData = async (enquiryId, type, version, data, userId) => {
                     } else {
                         //delete entire version
                         enquiry.Coral.splice(coralIndex, 1);
+                        // Move status back to in progress because in 10 mins designer deleted it
+                        statusEntry = {
+                            Status: 'Coral',
+                            Timestamp: new Date(),
+                            AssignedTo: enquiry.StatusHistory?.at(-1)?.AssignedTo,
+                            AddedBy: userId || 'System',
+                            Details: "Coral Version Deleted"
+                        };
+                        enquiry.StatusHistory.push(statusEntry);
                     }
                 }
                 
@@ -334,6 +343,14 @@ exports.updateAssetData = async (enquiryId, type, version, data, userId) => {
                     } else {
                         //delete entire version
                         enquiry.Cad.splice(cadIndex, 1);
+                        statusEntry = {
+                            Status: 'CAD',
+                            Timestamp: new Date(),
+                            AssignedTo: enquiry.StatusHistory?.at(-1)?.AssignedTo,
+                            AddedBy: userId || 'System',
+                            Details: "Cad Version Deleted"
+                        };
+                        enquiry.StatusHistory.push(statusEntry);
                     }
                 }
 
