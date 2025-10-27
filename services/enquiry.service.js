@@ -815,14 +815,14 @@ exports.calculatePricing = async (pricingDetails, clientId) => {
     const todaysMetalRates = await metalPricesService.getLatest();
 
     // Determine metal rate
-    if (pricingDetails.Metal.Quality === "Silver") {
-        metalRate = todaysMetalRates.silver.price;
-        metalFullRate = todaysMetalRates.silver.price;
+    if (pricingDetails.Metal.Quality === "Silver 925") {
+        metalRate = todaysMetalRates.silver?.price ?? 0;
+        metalFullRate = todaysMetalRates.silver?.price ?? 0;
     } else if (pricingDetails.Metal.Quality === "Platinum") {
-        metalRate = todaysMetalRates.platinum.price;
-        metalFullRate = todaysMetalRates.platinum.price;
+        metalRate = todaysMetalRates.platinum?.price ?? 0;
+        metalFullRate = todaysMetalRates.platinum?.price ?? 0;
     } else {
-        const goldRate = todaysMetalRates.gold.price;
+        const goldRate = todaysMetalRates.gold?.price ?? 0;
         metalFullRate = goldRate;
         const quality = pricingDetails.Metal.Quality?.toUpperCase();
         const match = quality?.match(/^(\d{1,2})K$/);
