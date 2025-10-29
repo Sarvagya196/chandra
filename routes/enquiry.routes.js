@@ -10,6 +10,9 @@ router.get('/', authenticateToken, controller.getEnquiries);
 // GET enquiry by id
 router.get('/:id', authenticateToken, controller.getEnquiryById);
 
+// GET enquiries by clientId
+router.get('/client/:clientId', authenticateToken, controller.getEnquiriesByClientId);
+
 // POST a new enquiry
 router.post('/', authenticateToken, controller.createEnquiry);
 
@@ -27,6 +30,7 @@ router.post(
     controller.uploadAssets // Third middleware: Processing the uploaded files
 );
 
+//Update asset details, marking as approved, 
 router.put('/:id/upload/:type',
     authenticateToken,
     controller.updateAssets

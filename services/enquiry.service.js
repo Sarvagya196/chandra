@@ -22,6 +22,11 @@ exports.getEnquiry = async (id) => {
     return await repo.getEnquiryById(id);
 };
 
+// Get enquiries by client id
+exports.getEnquiriesByClientId = async (clientId) => {
+    return await repo.getEnquiriesByClientId(clientId);
+};
+
 exports.createEnquiry = async (data, userId) => {
     const { AssignedTo, Status, ...rest } = data;
 
@@ -229,6 +234,7 @@ exports.updateAssetData = async (enquiryId, type, version, data, userId) => {
                         };
                     }
                     else {
+                        updatedCoral.ReasonForRejection = data.ReasonForRejection || "";
                         statusEntry = {
                             Status: 'Coral',
                             Timestamp: new Date(),
@@ -294,6 +300,7 @@ exports.updateAssetData = async (enquiryId, type, version, data, userId) => {
                 const updatedCad = enquiry.Cad[cadIndex];
 
                 if (data.IsFinalVersion !== undefined && data.IsFinalVersion !== null) {
+                    updatedCad.IsFinalVersion = data.IsFinalVersion;
                     if (data.IsFinalVersion === true) {
                         updatedCad.IsFinalVersion = data.IsFinalVersion;
                         statusEntry = {
@@ -305,12 +312,13 @@ exports.updateAssetData = async (enquiryId, type, version, data, userId) => {
                         };
                     }
                     else {
+                        updatedCad.ReasonForRejection = data.ReasonForRejection || "";
                         statusEntry = {
                             Status: 'CAD',
                             Timestamp: new Date(),
                             AssignedTo: enquiry.StatusHistory?.at(-1)?.AssignedTo,
                             AddedBy: userId || 'System',
-                            Details: "Cad Rejected - Redo"
+                            Details: "Cad Rejected - Redo" + data.ReasonForRejection ?? ""
                         };
                     }
                     enquiry.StatusHistory.push(statusEntry);

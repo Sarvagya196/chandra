@@ -96,7 +96,9 @@ const enquirySchema = new mongoose.Schema({
         Pricing: {
             type: PricingSchema
         },
+        ShowToClient: Boolean,
         IsApprovedVersion: Boolean,
+        ReasonForRejection: String,
         CreatedDate: { type: Date, default: Date.now }
     }],
     Cad: [{
@@ -116,7 +118,9 @@ const enquirySchema = new mongoose.Schema({
             type: PricingSchema
         },
         ClientPricingMessage: String,
+        ShowToClient: Boolean,
         IsFinalVersion: Boolean,
+        ReasonForRejection: String,
         CreatedDate: { type: Date, default: Date.now }
     }]
 });

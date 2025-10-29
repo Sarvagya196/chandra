@@ -20,6 +20,17 @@ exports.getEnquiryById = async (req, res) => {
     }
 };
 
+exports.getEnquiriesByClientId = async (req, res) => {
+    try {
+        const clientId = req.params.clientId;
+        const enquiries = await service.getEnquiriesByClientId(clientId);
+        res.json(enquiries);
+    } catch (error) {
+        console.error("Error fetching enquiries by clientId:", error);
+        res.status(500).json({ message: "Internal server error" });
+    }
+};
+
 exports.createEnquiry = async (req, res) => {
     const userId = req.user._id;
     try {

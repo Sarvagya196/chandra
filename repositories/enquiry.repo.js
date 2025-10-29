@@ -11,6 +11,11 @@ exports.getEnquiryById = async (id) => {
     return await Enquiry.findById(id);
 };
 
+// Get enquiries by client id
+exports.getEnquiriesByClientId = async (clientId) => {
+  return await Enquiry.find({ ClientId: clientId });
+}
+
 // Create a new enquiry
 exports.createEnquiry = async (enquiry) => {
     return await Enquiry.create(enquiry);
