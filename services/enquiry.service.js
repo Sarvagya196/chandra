@@ -27,6 +27,11 @@ exports.getEnquiriesByClientId = async (clientId) => {
     return await repo.getEnquiriesByClientId(clientId);
 };
 
+// Get enquiries by user id (from Participants)
+exports.getEnquiriesByUserId = async (userId) => {
+    return await repo.getEnquiriesByUserId(userId);
+};
+
 exports.createEnquiry = async (data, userId) => {
     const { AssignedTo, Status, ...rest } = data;
 

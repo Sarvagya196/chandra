@@ -16,6 +16,32 @@ exports.getEnquiriesByClientId = async (clientId) => {
   return await Enquiry.find({ ClientId: clientId });
 }
 
+// Get enquiries by user id (from Participants)
+exports.getEnquiriesByUserId = async (userId) => {
+  try {
+    const enquiries = await Enquiry.aggregate([
+      {
+        $addFields: {
+          lastStatus: { $arrayElemAt: ["$StatusHistory", -1] }
+        }
+      },
+      {
+        $match: {
+          "lastStatus.AssignedTo": userId
+        }
+      },
+      {
+        $project: { lastStatus: 0 }
+      }
+    ]);
+
+    res.json(enquiries);
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ message: "Error fetching enquiries" });
+  }
+};
+
 // Create a new enquiry
 exports.createEnquiry = async (enquiry) => {
     return await Enquiry.create(enquiry);
