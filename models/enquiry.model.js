@@ -117,7 +117,6 @@ const enquirySchema = new mongoose.Schema({
         Pricing: {
             type: PricingSchema
         },
-        ClientPricingMessage: String,
         ShowToClient: Boolean,
         IsFinalVersion: Boolean,
         ReasonForRejection: String,

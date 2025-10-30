@@ -263,6 +263,10 @@ exports.updateAssetData = async (enquiryId, type, version, data, userId) => {
                     enquiry.StatusHistory.push(statusEntry);
                 }
 
+                if(data.ShowToClient !== undefined && data.ShowToClient !== null) {
+                    updatedCoral.ShowToClient = data.ShowToClient;
+                }
+
                 if (data.Description && data.Id) {
                     updatedCoral.Images = updatedCoral.Images.map(image => {
                         if (image.Id === data.Id) {
@@ -339,6 +343,10 @@ exports.updateAssetData = async (enquiryId, type, version, data, userId) => {
                         Details: "Cad Pricing Updated"
                     };
                     enquiry.StatusHistory.push(statusEntry);
+                }
+
+                if(data.ShowToClient !== undefined && data.ShowToClient !== null) {
+                    updatedCad.ShowToClient = data.ShowToClient;
                 }
 
                 if (data.Description && data.Id) {
