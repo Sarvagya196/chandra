@@ -30,6 +30,8 @@ router.post(
     controller.uploadAssets // Third middleware: Processing the uploaded files
 );
 
+router.get('/user/:userId', authenticateToken, controller.getEnquiriesByUserId)
+
 //Update asset details, marking as approved, 
 router.put('/:id/upload/:type',
     authenticateToken,
