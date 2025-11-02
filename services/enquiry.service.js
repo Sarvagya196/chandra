@@ -843,7 +843,7 @@ exports.searchEnquiries = async (queryParams) => {
     };
 
     // --- 2. Prepare Sorting ---
-    const sortBy = queryParams.sortBy || 'CreatedDate'; // Default sort
+    const sortBy = queryParams.sortBy || 'AssignedDate'; // Default sort
     const sortOrder = queryParams.sortOrder === 'asc' ? 1 : -1;
     const sort = { [sortBy]: sortOrder };
 

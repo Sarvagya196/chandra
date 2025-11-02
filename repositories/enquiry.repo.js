@@ -93,8 +93,8 @@ exports.search = async (searchTerm, filters, sort, pagination) => {
         matchQuery.$or = [
             { Name: { $regex: searchTerm, $options: 'i' } },
             { StyleNumber: { $regex: searchTerm, $options: 'i' } },
-            { CoralCode: { $regex: searchTerm, $options: 'i' } },
-            { CadCode: { $regex: searchTerm, $options: 'i' } },
+            { "Coral.CoralCode": { $regex: searchTerm, $options: 'i' } },
+            { "Cad.CadCode": { $regex: searchTerm, $options: 'i' } },
             { GatiOrderNumber: { $regex: searchTerm, $options: 'i' } },
         ];
     }
