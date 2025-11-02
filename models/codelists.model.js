@@ -35,8 +35,4 @@ const CodelistSchema = new mongoose.Schema({
     }
 });
 
-// --- 3. Index for fast lookup ---
-// This index will make your findOne({ Type: "..." }) queries extremely fast.
-CodelistSchema.index({ Type: 1 });
-
 module.exports = mongoose.model('Codelist', CodelistSchema);
