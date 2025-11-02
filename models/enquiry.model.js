@@ -93,7 +93,7 @@ const enquirySchema = new mongoose.Schema({
             Description: String
         },
         Pricing: {
-            type: PricingSchema
+            type: [PricingSchema]
         },
         ShowToClient: Boolean,
         IsApprovedVersion: Boolean,
@@ -114,7 +114,7 @@ const enquirySchema = new mongoose.Schema({
             Description: String
         },
         Pricing: {
-            type: PricingSchema
+            type: [PricingSchema]
         },
         ShowToClient: Boolean,
         IsFinalVersion: Boolean,

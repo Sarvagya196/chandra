@@ -500,7 +500,7 @@ async function handleCoralUpload(enquiry, files, version, coralCode, userId) {
 
             let pricing = await exports.calculatePricing(excelTableJson, enquiry.ClientId);
 
-            let pricingEntry = {
+            let pricingEntry = [{
                 MetalPrice: parseFloat(pricing.MetalPrice),
                 DiamondsPrice: parseFloat(pricing.DiamondsPrice),
                 TotalPrice: parseFloat(pricing.TotalPrice),
@@ -527,7 +527,7 @@ async function handleCoralUpload(enquiry, files, version, coralCode, userId) {
                     CtWeight: Stone.CtWeight,
                     Price: Stone.Price
                 }))
-            };
+            }];
 
             asset.Pricing = pricingEntry || null;
         }
@@ -614,7 +614,7 @@ async function handleCadUpload(enquiry, files, version, cadCode, userId) {
 
             let pricing = await exports.calculatePricing(excelTableJson, enquiry.ClientId);
 
-            let pricingEntry = {
+            let pricingEntry = [{
                 MetalPrice: pricing.MetalPrice,
                 DiamondsPrice: pricing.DiamondsPrice,
                 TotalPrice: pricing.TotalPrice,
@@ -641,7 +641,7 @@ async function handleCadUpload(enquiry, files, version, cadCode, userId) {
                     CtWeight: Stone.CtWeight,
                     Price: Stone.Price
                 }))
-            };
+            }];
 
             asset.Pricing = pricingEntry || null;
         }
@@ -959,8 +959,8 @@ exports.calculatePricing = async (pricingDetails, clientId) => {
             if (ratePerCaratOfStone === undefined || ratePerCaratOfStone === null || ratePerCaratOfStone <= 0) {
                 diamondPriceNotFound = true;
             }
-            acc.diamondsPrice += stone.CtWeight * ratePerCaratOfStone;
-            acc.diamondWeight += stone.CtWeight;
+            acc.diamondsPrice += parseFloat(stone.CtWeight.toFixed(3)) * ratePerCaratOfStone;
+            acc.diamondWeight += parseFloat(stone.CtWeight.toFixed(3));
             return acc;
         },
         { diamondsPrice: 0, diamondWeight: 0 }
@@ -984,16 +984,16 @@ exports.calculatePricing = async (pricingDetails, clientId) => {
     const totalPrice = ((metalPrice +  diamondsPrice) * quantity) + extraCharges + dutiesAmount;
 
     return {
-        MetalPrice: parseFloat(metalPrice).toFixed(3),
-        DiamondsPrice: diamondPriceNotFound ? 0 : parseFloat(diamondsPrice).toFixed(3),
-        TotalPrice: parseFloat(totalPrice).toFixed(3),
+        MetalPrice: parseFloat(metalPrice.toFixed(3)),
+        DiamondsPrice: diamondPriceNotFound ? 0 : parseFloat(diamondsPrice.toFixed(3)),
+        TotalPrice: parseFloat(totalPrice.toFixed(3)),
         Metal: {
             Weight: metalWeight,
             Quality: metalQuality,
             Color: metalColor,
             Rate: parseFloat(metalFullRate).toFixed(3)
         },
-        DiamondWeight: diamondWeight?.toFixed(3),
+        DiamondWeight: parseFloat(diamondWeight?.toFixed(3)),
         TotalPieces: pricingDetails.TotalPieces,
         Client: {
             ExtraCharges: extraCharges,
