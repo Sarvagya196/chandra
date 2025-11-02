@@ -82,9 +82,10 @@ exports.uploadAssets = async (req, res) => {
     const files = req.files;
     const version = req.body.version;
     const userId = req.user._id;
-  
+    const code = req.code; // CadCode or CoralCode
+
     try {
-      const result = await service.handleAssetUpload(id, type, files, version, userId);
+      const result = await service.handleAssetUpload(id, type, files, version, code, userId);
       res.status(200).json({ message: 'Upload successful', data: result });
     } catch (err) {
       console.error(err);
@@ -136,5 +137,34 @@ exports.getPricing = async (req, res) => {
     } catch (error) {
         console.error("Error calculating pricing:", error);
         res.status(500).json({ message: "Internal server error" });
+    }
+};
+
+exports.getAggregatedCounts = async (req, res) => {
+    try {
+        // Pass the entire query object (e.g., { groupBy: 'status', assignedTo: 'xyz' })
+        const results = await service.getAggregatedCounts(req.query);
+        res.json(results);
+
+    } catch (error) {
+        console.error("Error aggregating enquiries:", error);
+        
+        // Handle specific errors from the service
+        if (error.message.startsWith("Missing 'groupBy'") || error.message.startsWith("Invalid aggregation type")) {
+             return res.status(400).json({ message: error.message });
+        }
+        
+        res.status(500).json({ message: "Internal server error" });
+    }
+};
+
+exports.searchEnquiries = async (req, res) => {
+    try {
+        // Pass all UI query params (e.g., ?search=...&status=...&page=1)
+        const results = await service.searchEnquiries(req.query); 
+        res.json(results);
+    } catch (error) {
+        console.error("Error searching enquiries:", error);
+        res.status(500).json({ message: "Internal server error", error: error.message });
     }
 };

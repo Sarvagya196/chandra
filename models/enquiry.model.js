@@ -74,8 +74,6 @@ const enquirySchema = new mongoose.Schema({
     Stamping: String,
     Remarks: String,
     ShippingDate: Date,
-    CadCode: String,
-    CoralCode: String,
     ReferenceImages: [{
         Id: String,
         Key: String,
@@ -83,6 +81,7 @@ const enquirySchema = new mongoose.Schema({
     }],
     Coral: [{
         Version: String,
+        CoralCode: String,
         Images: [{
             Id: String,
             Key: String,
@@ -103,7 +102,7 @@ const enquirySchema = new mongoose.Schema({
     }],
     Cad: [{
         Version: String,
-        CreatedDate: Date,
+        CadCode: String,
         Images: [{
             Id: String,
             Key: String,

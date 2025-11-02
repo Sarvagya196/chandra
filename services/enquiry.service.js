@@ -132,7 +132,7 @@ exports.updateEnquiry = async (id, data, userId) => {
         'Name', 'Quantity', 'StyleNumber', 'ClientId',
         'Priority', 'Metal', 'Category', 'StoneType',
         'MetalWeight', 'DiamondWeight', 'Stamping',
-        'Remarks', 'ShippingDate', 'CoralCode', 'CadCode'
+        'Remarks', 'ShippingDate'
     ];
 
     const updatedFields = {};
@@ -201,15 +201,15 @@ exports.updateEnquiry = async (id, data, userId) => {
     return { _id: enquiry._id };
 };
 
-exports.handleAssetUpload = async (id, type, files, version, userId) => {
+exports.handleAssetUpload = async (id, type, files, version, code, userId) => {
     const enquiry = await repo.getEnquiryById(id);
     if (!enquiry) throw new Error('Enquiry not found');
 
     switch (type) {
         case 'coral':
-            return await handleCoralUpload(enquiry, files, version, userId);
+            return await handleCoralUpload(enquiry, files, version, code, userId);
         case 'cad':
-            return await handleCadUpload(enquiry, files, version, userId);
+            return await handleCadUpload(enquiry, files, version, code, userId);
         case 'reference':
             return await handleReferenceImageUpload(enquiry, files, userId);
         default:
@@ -267,6 +267,10 @@ exports.updateAssetData = async (enquiryId, type, version, data, userId) => {
                     updatedCoral.ShowToClient = data.ShowToClient;
                 }
 
+                if(data.CoralCode !== undefined && data.CoralCode !== null) {
+                    updatedCoral.CoralCode = data.CoralCode;
+                }
+
                 if (data.Description && data.Id) {
                     updatedCoral.Images = updatedCoral.Images.map(image => {
                         if (image.Id === data.Id) {
@@ -313,7 +317,7 @@ exports.updateAssetData = async (enquiryId, type, version, data, userId) => {
                     if (data.IsFinalVersion === true) {
                         updatedCad.IsFinalVersion = data.IsFinalVersion;
                         statusEntry = {
-                            Status: 'Order Placement',
+                            Status: 'Approved Cad',
                             Timestamp: new Date(),
                             AssignedTo: null,
                             AddedBy: userId || 'System',
@@ -343,6 +347,10 @@ exports.updateAssetData = async (enquiryId, type, version, data, userId) => {
                         Details: "Cad Pricing Updated"
                     };
                     enquiry.StatusHistory.push(statusEntry);
+                }
+
+                if(data.CadCode !== undefined && data.CadCode !== null) {
+                    updatedCad.CadCode = data.CadCode;
                 }
 
                 if(data.ShowToClient !== undefined && data.ShowToClient !== null) {
@@ -441,7 +449,7 @@ exports.getEnquiryParticipants = async (enquiryId) => {
     return enquiry.Participants || [];
 }
 
-async function handleCoralUpload(enquiry, files, version, userId) {
+async function handleCoralUpload(enquiry, files, version, coralCode, userId) {
 
     const assetVersion = version || 'Version 1';
     let asset = enquiry.Coral.find(a => a.Version === assetVersion);
@@ -452,6 +460,7 @@ async function handleCoralUpload(enquiry, files, version, userId) {
             Images: [],
             Excel: null,
             Pricing: null,
+            CoralCode: coralCode || '',
             IsApprovedVersion: false
         };
     }
@@ -555,7 +564,7 @@ async function handleCoralUpload(enquiry, files, version, userId) {
     return { _id: enquiry._id };
 }
 
-async function handleCadUpload(enquiry, files, version, userId) {
+async function handleCadUpload(enquiry, files, version, cadCode, userId) {
     const assetVersion = version || 'Version 1';
     let asset = enquiry.Cad.find(a => a.Version === assetVersion);
 
@@ -565,6 +574,7 @@ async function handleCadUpload(enquiry, files, version, userId) {
             Images: [],
             Excel: null,
             Pricing: null,
+            CadCode: cadCode || '',
             IsFinalVersion: false
         };
     }
@@ -822,6 +832,63 @@ async function handleExcelDataForCad(file) {
     };
 }
 
+exports.searchEnquiries = async (queryParams) => {
+    
+    // --- 1. Prepare Pagination ---
+    const page = parseInt(queryParams.page, 10) || 1;
+    const limit = parseInt(queryParams.limit, 10) || 25;
+    const pagination = {
+        skip: (page - 1) * limit,
+        limit: limit
+    };
+
+    // --- 2. Prepare Sorting ---
+    const sortBy = queryParams.sortBy || 'CreatedDate'; // Default sort
+    const sortOrder = queryParams.sortOrder === 'asc' ? 1 : -1;
+    const sort = { [sortBy]: sortOrder };
+
+    // --- 3. Extract Search Term ---
+    // This is the value from your main search bar
+    const searchTerm = queryParams.search || null;
+
+    // --- 4. Extract Filters ---
+    // These are all other query params (e.g., status, priority, clientId)
+    const reservedKeys = ['page', 'limit', 'sortBy', 'sortOrder', 'search'];
+    const filters = {};
+    for (const key in queryParams) {
+        // If it's not a reserved key and has a value, add it to filters
+        if (!reservedKeys.includes(key) && queryParams[key]) {
+            filters[key] = queryParams[key];
+        }
+    }
+
+    // Call the repository with the clearly separated objects
+    const result = await repo.search(searchTerm, filters, sort, pagination);
+
+    return {
+        ...result,
+        page,
+        limit
+    };
+};
+
+exports.getAggregatedCounts = async (queryParams) => {
+    // 1. Separate 'groupBy' from the rest of the filters
+    const { groupBy, ...filters } = queryParams;
+
+    // 2. Validate groupBy
+    if (!groupBy) {
+        throw new Error("Missing 'groupBy' query parameter. Try 'status' or 'client'.");
+    }
+    const allowedTypes = ['status', 'client'];
+    if (!allowedTypes.includes(groupBy)) {
+        throw new Error("Invalid aggregation type. Must be one of: " + allowedTypes.join(', '));
+    }
+
+    // 3. Pass both groupBy and the filters object to the repository
+    return await repo.aggregateBy(groupBy, filters);
+};
+
 exports.calculatePricing = async (pricingDetails, clientId) => {
     //TODO which metal is it-> take that as parameter
     let loss, labour, extraCharges, duties, metalRate, metalFullRate, stones, metalWeight, metalQuality, metalColor, metalPrice, quantity, undercutPrice;
@@ -948,7 +1015,6 @@ exports.calculatePricing = async (pricingDetails, clientId) => {
     };
 
 }
-
 
 exports.getPresignedUrl = async (key, action) => {
     return await generatePresignedUrl(key, action);

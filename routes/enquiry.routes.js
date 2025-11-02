@@ -7,6 +7,12 @@ const dynamicUpload = require('../middleware/dynamicUpload');
 // GET all enquiries
 router.get('/', authenticateToken, controller.getEnquiries);
 
+// Search
+router.get('/search', authenticateToken, controller.searchEnquiries);
+
+// Aggregated Counts
+router.get('/aggregate', authenticateToken, controller.getAggregatedCounts);
+
 // GET enquiry by id
 router.get('/:id', authenticateToken, controller.getEnquiryById);
 
