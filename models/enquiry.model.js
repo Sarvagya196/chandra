@@ -123,4 +123,12 @@ const enquirySchema = new mongoose.Schema({
     }]
 });
 
+enquirySchema.index({ "Cad.CadCode": 1 });
+enquirySchema.index({ "Coral.CoralCode": 1 });
+
+// Also index your other top-level search fields
+enquirySchema.index({ Name: 1 });
+enquirySchema.index({ StyleNumber: 1 });
+enquirySchema.index({ GatiOrderNumber: 1 });
+
 module.exports = mongoose.model('Enquiry', enquirySchema);
