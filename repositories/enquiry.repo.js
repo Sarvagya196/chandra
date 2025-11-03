@@ -164,7 +164,20 @@ exports.search = async (searchTerm, filters, sort, pagination) => {
         if (filters.createdDateTo) postMatchQuery.CreatedDate.$lte = new Date(filters.createdDateTo);
     }
 
-    
+    const pipelineSort = { ...sort }; // Make a copy of the sort object
+    if (pipelineSort.priority) {
+      // 'Priority' exists in the sort object (e.g., { Priority: -1 })
+
+      // 1. Get the sort direction (1 for asc, -1 for desc)
+      const sortDirection = pipelineSort.priority;
+
+      // 2. Remove the old string-based sort key
+      delete pipelineSort.priority;
+
+      // 3. Add the new number-based sort key
+      pipelineSort.PriorityOrder = sortDirection;
+    }
+      
     // --- 3. Define the Aggregation Pipeline ---
     const pipeline = [
         // STAGE 1: Initial Filter (on indexed fields)
@@ -190,6 +203,17 @@ exports.search = async (searchTerm, filters, sort, pagination) => {
                 AssignedTo: "$lastStatus.AssignedTo",
                 AssignedDate: "$lastStatus.Timestamp",
                 CreatedDate: "$firstStatus.Timestamp",
+
+                // Convert Priority string to a sortable number
+                PriorityOrder: {
+                    $switch: {
+                        branches: [
+                            { case: { $eq: ["$Priority", "Super High"] }, then: 2 },
+                            { case: { $eq: ["$Priority", "High"] }, then: 1 }
+                        ],
+                        default: 0 // "Normal" or any other value will be 0
+                    }
+                },
                 
                 // Complex Image Logic
                 ComputedImages: {
@@ -218,7 +242,7 @@ exports.search = async (searchTerm, filters, sort, pagination) => {
         ...(Object.keys(postMatchQuery).length > 0 ? [{ $match: postMatchQuery }] : []),
 
         // STAGE 5: Sorting (on any computed or top-level field)
-        { $sort: sort },
+        { $sort: pipelineSort },
 
         // STAGE 6: Pagination and Final Projection ($facet)
         {

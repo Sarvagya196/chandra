@@ -82,7 +82,7 @@ exports.uploadAssets = async (req, res) => {
     const files = req.files;
     const version = req.body.version;
     const userId = req.user._id;
-    const code = req.code; // CadCode or CoralCode
+    const code = req.body.code; // CadCode or CoralCode
 
     try {
       const result = await service.handleAssetUpload(id, type, files, version, code, userId);
