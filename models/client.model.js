@@ -19,6 +19,7 @@ const DiamondSchema = new mongoose.Schema({
   
   const ClientSchema = new mongoose.Schema({
     Name: { type: String, required: true },
+    ImageUrl: { type: String },
     Pricing: PricingSchema
   });
   
