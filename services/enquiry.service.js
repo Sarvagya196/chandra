@@ -494,7 +494,6 @@ async function handleCoralUpload(enquiry, files, version, coralCode, userId) {
             excelTableJson.Metal = {
                 Weight: excelTableJson.Metal.Weight || null,
                 Quality: enquiry.Metal.Quality || null,
-                Color: enquiry.Metal.Color || null
             };
             excelTableJson.Quantity = enquiry.Quantity || 1;
 
@@ -513,7 +512,6 @@ async function handleCoralUpload(enquiry, files, version, coralCode, userId) {
                 Metal: {
                     Weight: pricing.Metal.Weight,
                     Quality: pricing.Metal.Quality,
-                    Color: pricing.Metal.Color,
                     Rate: pricing.Metal.Rate
                 },
                 Stones: pricing.Stones.map(Stone => ({
@@ -608,7 +606,6 @@ async function handleCadUpload(enquiry, files, version, cadCode, userId) {
             excelTableJson.Metal = {
                 Weight: excelTableJson.Metal.Weight || null,
                 Quality: enquiry.Metal.Quality || null,
-                Color: enquiry.Metal.Color || null
             };
             excelTableJson.Quantity = enquiry.Quantity || 1;
 
@@ -627,7 +624,6 @@ async function handleCadUpload(enquiry, files, version, cadCode, userId) {
                 Metal: {
                     Weight: pricing.Metal.Weight,
                     Quality: pricing.Metal.Quality,
-                    Color: pricing.Metal.Color,
                     Rate: pricing.Metal.Rate
                 },
                 Stones: pricing.Stones.map(Stone => ({
@@ -891,12 +887,11 @@ exports.getAggregatedCounts = async (queryParams) => {
 
 exports.calculatePricing = async (pricingDetails, clientId) => {
     //TODO which metal is it-> take that as parameter
-    let loss, labour, extraCharges, duties, metalRate, metalFullRate, stones, metalWeight, metalQuality, metalColor, metalPrice, quantity, undercutPrice;
+    let loss, labour, extraCharges, duties, metalRate, metalFullRate, stones, metalWeight, metalQuality, metalPrice, quantity, undercutPrice;
     undercutPrice = pricingDetails.UndercutPrice;
     stones = pricingDetails.Stones;
     metalWeight = parseFloat(pricingDetails.Metal.Weight);
     metalQuality = pricingDetails.Metal.Quality;
-    metalColor = pricingDetails.Metal.Color;
     quantity = pricingDetails.Quantity || 1;
     let diamondPriceNotFound = false;
 
@@ -990,7 +985,6 @@ exports.calculatePricing = async (pricingDetails, clientId) => {
         Metal: {
             Weight: metalWeight,
             Quality: metalQuality,
-            Color: metalColor,
             Rate: parseFloat(metalFullRate).toFixed(3)
         },
         DiamondWeight: parseFloat(diamondWeight?.toFixed(3)),
