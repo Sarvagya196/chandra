@@ -4,7 +4,6 @@ const chatService = require('../services/chat.service');
 const messageService = require('../services/message.service');
 const pushService = require('../services/pushNotification.service');
 const userService = require('../services/user.service');
-const sendMail = require('./email').sendMail;
 
 const frontendUrl =
   process.env.NODE_ENV === 'production'

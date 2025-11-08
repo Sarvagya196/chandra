@@ -8,7 +8,6 @@ const { v4: uuidv4 } = require('uuid');
 const xlsx = require('xlsx');
 const { getIO } = require('../utils/socket');
 const pushService = require('../services/pushNotification.service');
-const sendMail = require('../utils/email').sendMail;
 const codelistsService = require('../services/codelists.service');
 
 let frontendUrl = process.env.NODE_ENV === 'production' ? 'https://workflow-ui-virid.vercel.app' : 'http://localhost:4200';
@@ -106,23 +105,6 @@ exports.createEnquiry = async (data, userId) => {
     const adminIds = await userService.getUsersByRole(adminRoleId);
     const clientIds = await userService.getUsersByClient(enquiry.ClientId);
     const designerId = AssignedTo || null;
-
-    await Chat.insertMany([
-        {
-            enquiryId: enquiry._id,
-            enquiryName: enquiry.Name,
-            type: 'admin-client',
-            participants: [...adminIds, ...clientIds],
-        },
-        {
-            enquiryId: enquiry._id,
-            enquiryName: enquiry.Name,
-            type: 'admin-designer',
-            participants: designerId
-                ? [...adminIds, designerId]  // include designer if assigned
-                : [...adminIds],             // else only admins for now
-        }
-    ]);
 
     await chatService.createChat(enquiry._id, enquiry.Name, 'admin-client', [...adminIds, ...clientIds]);
     await chatService.createChat(enquiry._id, enquiry.Name, 'admin-designer', designerId ? [...adminIds, designerId] : [...adminIds]);
@@ -458,41 +440,6 @@ exports.updateAssetData = async (enquiryId, type, version, data, userId) => {
     return await repo.updateEnquiry(enquiryId, enquiry);
 };
 
-exports.handleEnquiryParticipants = async (enquiryId, userId, toAdd) => {
-    const enquiry = await repo.getEnquiryById(enquiryId);
-    if (!enquiry) throw new Error('Enquiry not found');
-
-    if (!Array.isArray(enquiry.Participants)) {
-        enquiry.Participants = [];
-    }
-
-    if (toAdd) {
-        // Add or update participant with active = true
-        const existing = enquiry.Participants.find(p => p.UserId === userId);
-        if (existing) {
-            existing.IsActive = true;
-        } else {
-            enquiry.Participants.push({ UserId: userId, IsActive: true });
-        }
-    } else {
-        // Instead of removing, just mark active = false
-        const existing = enquiry.Participants.find(p => p.UserId === userId);
-        if (existing) {
-            existing.IsActive = false;
-        } else {
-            // optional: if not found, still add as inactive
-            enquiry.Participants.push({ UserId: userId, IsActive: false });
-        }
-    }
-
-    await repo.updateEnquiry(enquiryId, enquiry);
-};
-
-exports.getEnquiryParticipants = async (enquiryId) => {
-    const enquiry = await repo.getEnquiryById(enquiryId);
-    if (!enquiry) throw new Error('Enquiry not found');
-    return enquiry.Participants || [];
-}
 
 async function handleCoralUpload(enquiry, files, version, coralCode, userId) {
 
