@@ -1,6 +1,5 @@
 const repo = require('../repositories/client.repo');
 
-
 exports.getClients = async () => {
   try {
     return await repo.getAllClients(); // Await the promise from the repository

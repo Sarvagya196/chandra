@@ -43,10 +43,6 @@ const enquirySchema = new mongoose.Schema({
     StyleNumber: String,
     GatiOrderNumber: String,
     ClientId: { type: String, ref: 'Client' },
-    Participants: [{
-        UserId: { type: String, ref: 'User' },
-        IsActive: { type: Boolean, default: true },
-    }],
     StatusHistory: [{
         Status: String,
         Timestamp: Date,

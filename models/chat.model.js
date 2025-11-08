@@ -1,29 +1,30 @@
+const mongoose = require('mongoose');
 const ChatSchema = new mongoose.Schema({
-  enquiryId: { 
+  EnquiryId: { 
     type: mongoose.Schema.Types.ObjectId, 
     ref: 'Enquiry', 
     required: true 
   },
-  enquiryName: { type: String, required: true }, // cached for quick display
+  EnquiryName: { type: String, required: true }, // cached for quick display
 
-  type: { 
+  Type: { 
     type: String, 
     enum: ['admin-client', 'admin-designer'], 
     required: true 
   },
 
-  participants: [{ type: mongoose.Schema.Types.ObjectId, ref: 'User' }],
-  lastMessage: { type: mongoose.Schema.Types.ObjectId, ref: 'Message' },
+  Participants: [{ type: mongoose.Schema.Types.ObjectId, ref: 'User' }],
+  LastMessage: { type: mongoose.Schema.Types.ObjectId, ref: 'Message' },
 
-  lastRead: [
+  LastRead: [
     {
-      userId: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
-      lastReadAt: { type: Date, default: null }
+      UserId: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
+      LastReadAt: { type: Date, default: null }
     }
   ],
 
-  createdAt: { type: Date, default: Date.now },
-  updatedAt: { type: Date, default: Date.now }
+  CreatedAt: { type: Date, default: Date.now },
+  UpdatedAt: { type: Date, default: Date.now }
 }, { timestamps: true });
 
 ChatSchema.index({ enquiryId: 1, type: 1 }, { unique: true });

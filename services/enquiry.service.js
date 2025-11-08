@@ -2,13 +2,14 @@ const repo = require('../repositories/enquiry.repo');
 const userService = require("../services/user.service");
 const clientService = require("../services/client.service");
 const metalPricesService = require("../services/metalPrices.service");
-const chatService = require('../services/chat.service');
+const chatService = require('./chat.service');
 const { uploadToS3, generatePresignedUrl } = require('../utils/s3');
 const { v4: uuidv4 } = require('uuid');
 const xlsx = require('xlsx');
 const { getIO } = require('../utils/socket');
 const pushService = require('../services/pushNotification.service');
 const sendMail = require('../utils/email').sendMail;
+const codelistsService = require('../services/codelists.service');
 
 let frontendUrl = process.env.NODE_ENV === 'production' ? 'https://workflow-ui-virid.vercel.app' : 'http://localhost:4200';
 
@@ -68,38 +69,64 @@ exports.createEnquiry = async (data, userId) => {
         // });
 
         // Also send push notification
-        this.handleEnquiryParticipants(enquiry._id, AssignedTo, false);
-        const subscription = await pushService.getSubscription(AssignedTo);
-        if (subscription) {
-            try {
-                await pushService.sendPush(AssignedTo, {
-                    title: `New enquiry assigned`,
-                    body: `You've been assigned enquiry #${enquiry._id}.`,
-                    url: `${frontendUrl}/enquiries/${enquiry._id}`
-                });
-            } catch (err) {
-                console.error(`Failed to push to user ${AssignedTo}`, err);
-            }
-        }
+        // this.handleEnquiryParticipants(enquiry._id, AssignedTo, false);
+        // const subscription = await pushService.getSubscription(AssignedTo);
+        // if (subscription) {
+        //     try {
+        //         await pushService.sendPush(AssignedTo, {
+        //             title: `New enquiry assigned`,
+        //             body: `You've been assigned enquiry #${enquiry._id}.`,
+        //             url: `${frontendUrl}/enquiries/${enquiry._id}`
+        //         });
+        //     } catch (err) {
+        //         console.error(`Failed to push to user ${AssignedTo}`, err);
+        //     }
+        // }
 
         // Also send email notification always
-        const assignedUser = await userService.getUserById(AssignedTo);
-        if (!assignedUser || !assignedUser.email) {
-            console.warn(`No email for user ${AssignedTo}, skipping email notification`);
-            return enquiry._id;
-        }
-        await sendMail(
-            assignedUser.email,
-            `New enquiry assigned #${enquiry._id}`,
-            `
-                <p>Hello ${assignedUser.name || ''},</p>
-                <p>You have been assigned a new enquiry <b>#${enquiry._id}</b>.</p>
-                <p><a href="${frontendUrl}/enquiries/${enquiry._id}">View Enquiry</a></p>
-            `,
-            `New enquiry assigned #${enquiry._id}`
-        );
+        // const assignedUser = await userService.getUserById(AssignedTo);
+        // if (!assignedUser || !assignedUser.email) {
+        //     console.warn(`No email for user ${AssignedTo}, skipping email notification`);
+        //     return enquiry._id;
+        // }
+        // await sendMail(
+        //     assignedUser.email,
+        //     `New enquiry assigned #${enquiry._id}`,
+        //     `
+        //         <p>Hello ${assignedUser.name || ''},</p>
+        //         <p>You have been assigned a new enquiry <b>#${enquiry._id}</b>.</p>
+        //         <p><a href="${frontendUrl}/enquiries/${enquiry._id}">View Enquiry</a></p>
+        //     `,
+        //     `New enquiry assigned #${enquiry._id}`
+        // );
 
     }
+
+    const adminRoleId = codelistsService.getCodelistByName("Roles")?.find(role => role.Code === "AD")?.Id;
+    const adminIds = await userService.getUsersByRole(adminRoleId);
+    const clientIds = await userService.getUsersByClient(enquiry.ClientId);
+    const designerId = AssignedTo || null;
+
+    await Chat.insertMany([
+        {
+            enquiryId: enquiry._id,
+            enquiryName: enquiry.Name,
+            type: 'admin-client',
+            participants: [...adminIds, ...clientIds],
+        },
+        {
+            enquiryId: enquiry._id,
+            enquiryName: enquiry.Name,
+            type: 'admin-designer',
+            participants: designerId
+                ? [...adminIds, designerId]  // include designer if assigned
+                : [...adminIds],             // else only admins for now
+        }
+    ]);
+
+    await chatService.createChat(enquiry._id, enquiry.Name, 'admin-client', [...adminIds, ...clientIds]);
+    await chatService.createChat(enquiry._id, enquiry.Name, 'admin-designer', designerId ? [...adminIds, designerId] : [...adminIds]);
+
 
     return enquiry._id;
 };
@@ -112,8 +139,8 @@ exports.deleteEnquiry = async (id) => {
             throw new Error('Enquiry not found');
         }
 
-        // 2️⃣ Delete all related messages
-        await chatService.deleteMessages(id);
+        // 2️⃣ Delete all related messages TODO and send notification as well
+        await chatService.deleteChatsByEnquiryId(id);
 
         // 3️⃣ Return the deleted enquiry
         return deleted;
@@ -167,21 +194,39 @@ exports.updateEnquiry = async (id, data, userId) => {
             //     timestamp: new Date(),
             // });
             // Also send push notification
-            this.handleEnquiryParticipants(enquiry._id, newAssignee._id, false);
-            const subscription = await pushService.getSubscription(newAssignee._id);
-            if (subscription) {
-                try {
-                    await pushService.sendPush(newAssignee._id, {
-                        title: `Enquiry Updated`,
-                        body: `Enquiry #${id}. has updates. Click to check.`,
-                        url: `${frontendUrl}/enquiries/${id}`
-                    });
-                } catch (err) {
-                    console.error(`Failed to push to user ${newAssignee._id}`, err);
-                }
-            }
+            // this.handleEnquiryParticipants(enquiry._id, newAssignee._id, false);
+            // const subscription = await pushService.getSubscription(newAssignee._id);
+            // if (subscription) {
+            //     try {
+            //         await pushService.sendPush(newAssignee._id, {
+            //             title: `Enquiry Updated`,
+            //             body: `Enquiry #${id}. has updates. Click to check.`,
+            //             url: `${frontendUrl}/enquiries/${id}`
+            //         });
+            //     } catch (err) {
+            //         console.error(`Failed to push to user ${newAssignee._id}`, err);
+            //     }
+            // }
         }
 
+        // 🟢 Add new designer to admin-designer chat
+        if (newAssignee?._id) {
+            await chatService.addParticipantIfMissing(enquiry._id, 'admin-designer', newAssignee._id);
+        }
+
+    }
+
+    // 2️⃣ Client changed
+    if (enquiry.ClientId != data.ClientId) {
+        const adminRoleId = codelistsService.getCodelistByName("Roles")
+            ?.find(role => role.Code === "AD")?.Id;
+        const adminIds = await userService.getUsersByRole(adminRoleId);
+        const newClientIds = await userService.getUsersByClient(data.ClientId);
+
+        changes.push(`Client changed: from "${enquiry.ClientId}" to "${data.ClientId}"`);
+
+        // 🟢 Replace non-admins in admin-client chat
+        await chatService.updateParticipants(enquiry._id, 'admin-client', [...adminIds, ...newClientIds]);
     }
 
     if (changes.length > 0) {
@@ -768,6 +813,7 @@ async function handleExcelDataForCoral(file) {
     };
 }
 
+//TODO, change to previous format only
 async function handleExcelDataForCad(file) {
     if (!file || !file.buffer) {
         return;

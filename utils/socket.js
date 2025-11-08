@@ -1,138 +1,188 @@
 // socket.js
 const { Server } = require('socket.io');
-const chatController = require('../controllers/chat.controller');
+const chatService = require('../services/chat.service');
+const messageService = require('../services/message.service');
 const pushService = require('../services/pushNotification.service');
 const userService = require('../services/user.service');
-const enquiryService = require('../services/enquiry.service');
 const sendMail = require('./email').sendMail;
 
-let frontendUrl = process.env.NODE_ENV === 'production' ? 'https://workflow-ui-virid.vercel.app' : 'http://localhost:4200';
+const frontendUrl =
+  process.env.NODE_ENV === 'production'
+    ? 'https://workflow-ui-virid.vercel.app'
+    : 'http://localhost:4200';
 
 function initSocket(server) {
-    const io = new Server(server, {
-        cors: {
-            origin: [
-                'http://localhost:4200',
-                'https://workflow-ui-virid.vercel.app'
-            ],
-            methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
-            credentials: true
+  const io = new Server(server, {
+    cors: {
+      origin: [
+        'http://localhost:4200',
+        'https://workflow-ui-virid.vercel.app'
+      ],
+      methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+      credentials: true
+    }
+  });
+
+  io.on('connection', (socket) => {
+    console.log('🔌 New client connected:', socket.id);
+
+    /**
+     * Join a specific chat room.
+     */
+    socket.on('joinChat', async ({ chatId, userId }) => {
+      try {
+        if (socket.data.chatId) {
+            socket.leave(`chat_${socket.data.chatId}`);
+          }
+
+          socket.join(`chat_${chatId}`);
+          socket.data.userId = userId;
+          socket.data.chatId = chatId;
+
+          await chatService.markChatAsRead(chatId, [userId]);
+          await messageService.markMessagesAsRead(chatId, [userId]);
+          // ✅ Notify others in the chat (for read ticks)
+          io.to(`chat_${chatId}`).emit('messagesRead', { chatId, userIds : [userId] });
+
+          console.log(`🟢 ${userId} joined room chat_${chatId}`);
+      } catch (err) {
+        console.error('Error joining chat room:', err);
+      }
+    });
+
+    /**
+     * Leave chat room
+     */
+    socket.on('leaveChat', async ({ chatId, userId }) => {
+      try {
+        socket.leave(`chat_${chatId}`);
+        socket.data.chatId = null;
+        console.log(`🔴 ${userId} left room chat_${chatId}`);
+      } catch (err) {
+        console.error('Error leaving chat room:', err);
+      }
+    });
+
+    /**
+     * Join personal notification room for offline push notifications.
+     */
+    socket.on('joinNotificationRoom', async (userId) => {
+      socket.join(`user_${userId}`);
+      console.log(`🟢 ${userId} joined notifications room`);
+    });
+
+    socket.on('leaveNotificationRoom', async (userId) => {
+      socket.leave(`user_${userId}`);
+      console.log(`🔴 ${userId} left notifications room`);
+    });
+
+      /**
+   * Handle sending a new message.
+   */
+    socket.on('sendMessage', async (data) => {
+        const {
+            chatId,
+            userId,
+            message,
+            messageType,
+            parentMessageId,
+            mediaKey,
+            mediaName,
+            mediaUrl,
+            mediaSize
+        } = data;
+
+        try {
+            // 1️⃣ Save message in DB
+            const savedMessage = await messageService.createMessage({
+                ChatId: chatId,
+                SenderId: userId,
+                Message: message,
+                MessageType: messageType,
+                ParentMessageId: parentMessageId || null,
+                MediaKey: mediaKey,
+                MediaName: mediaName,
+                MediaUrl: mediaUrl,
+                MediaSize: mediaSize
+            });
+
+            console.log(`💬 Message sent in chat ${chatId} by ${userId}`);
+
+            // 2️⃣ Emit to all users in the chat room (real-time)
+            io.to(`chat_${chatId}`).emit('newMessage', savedMessage);
+
+            // 3️⃣ Identify currently active users in this chat
+            const connectedSockets = await io.in(`chat_${chatId}`).fetchSockets();
+            const activeUserIds = connectedSockets.map((s) => s.data.userId);
+            const readers = activeUserIds.filter((id) => id !== userId);
+
+            // 4️⃣ Mark message as read for all active users (except sender)
+            if (readers.length > 0) {
+                await chatService.markChatAsRead(chatId, readers);
+                await messageService.markMessagesAsRead(chatId, readers);
+
+                // 5️⃣ Notify everyone (sender + other clients) that messages were read
+                io.to(`chat_${chatId}`).emit('messagesRead', {
+                    chatId,
+                    userIds: readers,
+                });
+
+                console.log(`👀 Active readers in chat ${chatId}:`, readers);
+            }
+
+            // 6️⃣ Fetch chat participants for offline notifications
+            const chat = await chatService.getChatByChatId(chatId);
+            if (!chat) {
+                console.warn(`Chat ${chatId} not found`);
+                return;
+            }
+
+            // Recipients = all except sender
+            const recipients = chat.Participants?.filter(
+                (p) => p.toString() !== userId.toString()
+            ) || [];
+
+            // Determine offline users = participants not in active socket list
+            const offlineUserIds = recipients.filter(
+                (id) => !activeUserIds.includes(id.toString())
+            );
+
+            console.log(
+                `🔔 Offline participants in chat ${chatId}:`,
+                offlineUserIds
+            );
+
+            // 7️⃣ TODO: handle offline notifications (push/email)
+            for (const recipientId of offlineUserIds) {
+                // Example placeholder:
+                // await pushService.sendPush(recipientId, { title: 'New message', body: message });
+                // await emailService.sendEmailNotification(recipientId, chatId, message);
+            }
+
+        } catch (err) {
+            console.error('❌ Socket message error:', err);
+            socket.emit('error', { message: 'Failed to send message' });
         }
     });
 
-    io.on('connection', (socket) => {
-        console.log('🔌 New client connected:', socket.id);
 
-        socket.on('joinRoom', async ({ enquiryId, userId }) => {
-            socket.join(`enquiry_${enquiryId}`);
-            if (socket.data.enquiryId) {
-                socket.leave(`enquiry_${socket.data.enquiryId}`);
-            }
-            socket.data.userId = userId;
-            socket.data.enquiryId = enquiryId;
-            console.log(`🟢 ${userId} joined room enquiry_${enquiryId}`);
-            await enquiryService.handleEnquiryParticipants(enquiryId, userId, true);
-        });
-
-        socket.on('leaveRoom', async ({ enquiryId, userId }) => {
-            socket.leave(`enquiry_${enquiryId}`);
-            socket.data.enquiryId = null;
-            await enquiryService.handleEnquiryParticipants(enquiryId, userId, false);
-            console.log(`🔴 Left room enquiry_${enquiryId}`);
-        });
-
-        socket.on('joinNotificationRoom', async (userId) => {
-            socket.join(`user_${userId}`);
-            console.log(`🟢 ${userId} joined room notifications`);
-        });
-
-        socket.on('leaveNotificationRoom', async (userId) => {
-            socket.leave(`user_${userId}`);
-            console.log(`🟢 ${userId} left room notifications`);
-        });
-
-        socket.on('newMessage', async (data) => {
-            const { enquiryId, userId, message, messageType, mediaKey, mediaName } = data;
-
-            try {
-                const saved = await chatController.saveMessage({
-                    enquiryId,
-                    senderId: userId,
-                    message,
-                    messageType,
-                    mediaKey,
-                    mediaName
-                });
-
-                io.to(`enquiry_${enquiryId}`).emit('message', saved);
-
-                var recipients = await enquiryService.getEnquiryParticipants(enquiryId);
-                console.log(`🔔 Recipients for enquiry ${enquiryId}:`, recipients);
-                recipients = recipients.filter(participant => participant.UserId !== userId && participant.IsActive === false);
-                console.log(`🔔 Notifying ${recipients.length} participants of enquiry ${enquiryId}`);
-
-                for (const recipient of recipients) {
-                    console.log(`🔔 Notifying user ${recipient.UserId} about new message in enquiry ${enquiryId}`);
-                    // 🔹 First send socket notification (if they are connected but not in the enquiry room)
-                    io.to(`user_${recipient.UserId}`).emit('messageNotification', saved);
-
-                    // 🔹 Then also send push if they’re offline / not connected
-                    const subscription = await pushService.getSubscription(recipient.UserId);
-                    console.log(`🔔 Push subscription for user ${recipient.UserId}:`, subscription);
-                    if (subscription) {
-                        try {
-                            await pushService.sendPush(recipient.UserId, {
-                                title: `New message in enquiry ${enquiryId}`,
-                                body: messageType === 'text' ? message : `📎 ${mediaName || 'New file'}`,
-                                url: `${frontendUrl}/enquiries/${enquiryId}`
-                            });
-                        } catch (err) {
-                            console.error(`Failed to push to user ${recipient.UserId}`, err);
-                        }
-                    }
-
-                    // 🔹 Then also send mail if they’re offline / not connected always
-                    try {
-                        const recipientUser = await userService.getUserById(recipient.UserId);
-                        if (!recipientUser || !recipientUser.email) {
-                            // If no email, skip sending email notification
-                            console.warn(`No email for user ${recipient.UserId}, skipping email notification`);
-                            continue;
-                        }
-                        await sendMail(
-                            recipientUser.email, // make sure recipients array has email addresses
-                            `New message in enquiry ${enquiryId}`,
-                            `
-                    <p>Hello ${recipientUser.name || ''},</p>
-                    <p>You have a new message in enquiry <b>${enquiryId}</b>.</p>
-                    <p>${messageType === 'text' ? message : `📎 ${mediaName || 'New file'}`}</p>
-                    <p><a href="${frontendUrl}/enquiries/${enquiryId}">View Enquiry</a></p>
-                `,
-                            `New message in enquiry ${enquiryId}: ${messageType === 'text' ? message : mediaName || 'New file'}`
-                        );
-                    } catch (err) {
-                        console.error(`❌ Failed to email user ${recipient.UserId}`, err);
-                    }
-                }
-
-            } catch (err) {
-                console.error('Chat message error:', err);
-                socket.emit('error', { message: 'Failed to save message' });
-            }
-        });
-
-        socket.on('disconnect', () => {
-            if (socket.data.enquiryId && socket.data.userId) {
-                enquiryService.handleEnquiryParticipants(socket.data.enquiryId, socket.data.userId, false);
-            }
-            socket.leaveAll();
-            socket.data.enquiryId = null;
-            socket.data.userId = null;
-            console.log('⚡ Client disconnected:', socket.id);
-        });
+    /**
+     * TODO Typing indicators
+     */
+    socket.on('typing', ({ chatId, userId, isTyping }) => {
+      socket.to(`chat_${chatId}`).emit('userTyping', { userId, isTyping });
     });
 
-    return io;
+    /**
+     * Handle disconnection
+     */
+    socket.on('disconnect', () => {
+      socket.leaveAll();
+      console.log('⚡ Client disconnected:', socket.id);
+    });
+  });
+
+  return io;
 }
 
 module.exports = initSocket;
