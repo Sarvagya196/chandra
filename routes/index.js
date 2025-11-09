@@ -7,7 +7,6 @@ const userRoutes = require('./user.routes');
 const loginRoutes =  require('./login.routes');
 const metalPricesRoutes = require('./metalPrices.routes');
 const chatRoutes = require('./chat.routes');
-const pushRoutes = require('./push.routes');
 const codelistsRoutes = require('./codelists.routes');
 const messageRoutes = require('./message.routes');
 
@@ -16,9 +15,8 @@ router.use('/clients', clientRoutes);
 router.use('/users', userRoutes);
 router.use('/login', loginRoutes);
 router.use('/metal-prices', metalPricesRoutes);
-router.use('/chats', chatRoutes)
-router.use('/message', messageRoutes)
-router.use('/push', pushRoutes)
+router.use('/chats', chatRoutes);
+router.use('/message', messageRoutes);
 router.use('/codelists', codelistsRoutes);
 
 module.exports = router;
