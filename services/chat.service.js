@@ -11,7 +11,7 @@ const messageService = require('../services/message.service');
  * @param {String} data.Type - 'admin-client' | 'admin-designer'
  * @param {Array<ObjectId>} data.Participants
  */
-exports.createChat = async ({ EnquiryId, EnquiryName, Type, Participants }) => {
+exports.createChat = async (EnquiryId, EnquiryName, Type, Participants) => {
   try {
     // Check for existing chat
     const existingChat = await repo.findChatByEnquiryAndType(EnquiryId, Type);

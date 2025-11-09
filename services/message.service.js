@@ -29,8 +29,7 @@ exports.deleteMessagesByChatIds = async (chatIds) => {
   if (!chatIds?.length) return { deletedCount: 0 };
 
   try {
-    const result = await Message.deleteMany({ ChatId: { $in: chatIds } });
-    console.log(`🗑️ Deleted ${result.deletedCount} messages for chats:`, chatIds);
+    const result = await repo.deleteMessagesByChatIds(chatIds);
     return result;
   } catch (err) {
     console.error(`❌ Error deleting messages for chats ${chatIds}:`, err);

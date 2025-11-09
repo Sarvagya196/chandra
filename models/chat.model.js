@@ -27,4 +27,6 @@ const ChatSchema = new mongoose.Schema({
   UpdatedAt: { type: Date, default: Date.now }
 }, { timestamps: true });
 
-ChatSchema.index({ enquiryId: 1, type: 1 }, { unique: true });
+ChatSchema.index({ EnquiryId: 1, Type: 1 }, { unique: true });
+
+module.exports = mongoose.model('Chat', ChatSchema);

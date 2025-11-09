@@ -101,7 +101,7 @@ exports.createEnquiry = async (data, userId) => {
 
     }
 
-    const adminRoleId = await codelistsService.getCodelistByName("Roles")?.find(role => role.Code === "AD")?.Id;
+    const adminRoleId = (await codelistsService.getCodelistByName("Roles"))?.find(role => role.Code === "AD")?.Id;
     const adminIds = await userService.getUsersByRole(adminRoleId);
     const clientIds = await userService.getUsersByClient(enquiry.ClientId);
     const designerId = AssignedTo || null;
@@ -116,6 +116,7 @@ exports.createEnquiry = async (data, userId) => {
 exports.deleteEnquiry = async (id) => {
     try {
         // 1️⃣ Delete the enquiry
+        console.log(`Deleting enquiry ${id}...`);
         const deleted = await repo.deleteEnquiry(id);
         if (!deleted) {
             throw new Error('Enquiry not found');
