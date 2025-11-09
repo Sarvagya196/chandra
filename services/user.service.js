@@ -7,7 +7,7 @@ exports.getUsers = async () => {
 
 // Get a user by ID
 exports.getUserById = async (id) => {
-    return await repo.getUser(id); // Corrected to use the repo method you defined
+    return await repo.getUser(id);
 };
 
 exports.getUsersByRole = async (roleId) => {
@@ -17,3 +17,9 @@ exports.getUsersByRole = async (roleId) => {
 exports.getUsersByClient = async (clientId) => {
     return await repo.getUsersByClient(clientId);
 }
+
+exports.savePushToken = async (userId, token) => {
+  return await repo.savePushToken(userId, token);
+};
+
+exports.getTokensByIds = (userIds) => repo.getTokensByIds(userIds);

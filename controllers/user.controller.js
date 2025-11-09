@@ -25,3 +25,18 @@ exports.getUserById = async (req, res) => {
         res.status(500).json({ error: err.message });
     }
 };
+
+exports.savePushToken = async (req, res) => {
+  try {
+    const userId = req.user._id;
+    const { token } = req.body;
+    if (!token) {
+      return res.status(400).json({ message: 'Push token is required' });
+    }
+    await service.savePushToken(userId, token);
+    res.status(200).json({ message: 'Push token saved successfully' });
+  } catch (error) {
+    console.error('Error saving push token:', error);
+    res.status(500).json({ message: 'Failed to save push token' });
+  }
+};

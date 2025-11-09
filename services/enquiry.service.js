@@ -6,11 +6,8 @@ const chatService = require('./chat.service');
 const { uploadToS3, generatePresignedUrl } = require('../utils/s3');
 const { v4: uuidv4 } = require('uuid');
 const xlsx = require('xlsx');
-const { getIO } = require('../utils/socket');
 const pushService = require('../services/pushNotification.service');
 const codelistsService = require('../services/codelists.service');
-
-let frontendUrl = process.env.NODE_ENV === 'production' ? 'https://workflow-ui-virid.vercel.app' : 'http://localhost:4200';
 
 // Get all enquiries
 exports.getEnquiries = async () => {
@@ -58,48 +55,6 @@ exports.createEnquiry = async (data, userId) => {
     };
 
     const enquiry = await repo.createEnquiry(enquiryData);
-    if(AssignedTo) {
-        // const io = getIO();
-        // // TODO add link here to item
-        // io.to(`user_${AssignedTo}`).emit('messageNotification', {
-        //     type: 'assignment',
-        //     message: `You've been assigned enquiry #${enquiry._id}.`,
-        //     timestamp: new Date(),
-        // });
-
-        // Also send push notification
-        // this.handleEnquiryParticipants(enquiry._id, AssignedTo, false);
-        // const subscription = await pushService.getSubscription(AssignedTo);
-        // if (subscription) {
-        //     try {
-        //         await pushService.sendPush(AssignedTo, {
-        //             title: `New enquiry assigned`,
-        //             body: `You've been assigned enquiry #${enquiry._id}.`,
-        //             url: `${frontendUrl}/enquiries/${enquiry._id}`
-        //         });
-        //     } catch (err) {
-        //         console.error(`Failed to push to user ${AssignedTo}`, err);
-        //     }
-        // }
-
-        // Also send email notification always
-        // const assignedUser = await userService.getUserById(AssignedTo);
-        // if (!assignedUser || !assignedUser.email) {
-        //     console.warn(`No email for user ${AssignedTo}, skipping email notification`);
-        //     return enquiry._id;
-        // }
-        // await sendMail(
-        //     assignedUser.email,
-        //     `New enquiry assigned #${enquiry._id}`,
-        //     `
-        //         <p>Hello ${assignedUser.name || ''},</p>
-        //         <p>You have been assigned a new enquiry <b>#${enquiry._id}</b>.</p>
-        //         <p><a href="${frontendUrl}/enquiries/${enquiry._id}">View Enquiry</a></p>
-        //     `,
-        //     `New enquiry assigned #${enquiry._id}`
-        // );
-
-    }
 
     const adminRoleId = (await codelistsService.getCodelistByName("Roles"))?.find(role => role.Code === "AD")?.Id;
     const adminIds = await userService.getUsersByRole(adminRoleId);
@@ -109,6 +64,48 @@ exports.createEnquiry = async (data, userId) => {
     await chatService.createChat(enquiry._id, enquiry.Name, 'admin-client', [...adminIds, ...clientIds]);
     await chatService.createChat(enquiry._id, enquiry.Name, 'admin-designer', designerId ? [...adminIds, designerId] : [...adminIds]);
 
+    // 5️⃣ 🔔 Send notifications
+    try {
+        // Admin notifications
+        const adminTokens = userService.getTokensByIds(adminIds);
+
+        if (adminTokens.length > 0) {
+            await pushService.sendPushToTokens(
+                adminTokens,
+                '🆕 New Enquiry Created',
+                `New enquiry "${enquiry.Name}" has been created.`,
+                {
+                    enquiryId: enquiry._id.toString(),
+                    clientId: enquiry.ClientId.toString(),
+                    type: 'enquiry_created',
+                }
+            );
+        }
+
+        // Designer notification (if assigned)
+        if (designerId) {
+            const designerTokens = userService.getTokensByIds([designerId]);
+
+            if (designerTokens.length > 0) {
+                await pushService.sendPushToTokens(
+                    designerTokens,
+                    '🎨 New Enquiry Assigned',
+                    `You've been assigned enquiry "${enquiry.Name}".`,
+                    {
+                        enquiryId: enquiry._id.toString(),
+                        type: 'enquiry_assigned',
+                    }
+                );
+            }
+        }
+
+        console.log(
+            `📲 Sent enquiry creation notifications: ${adminIds.length} admins, ${designerId ? 1 : 0
+            } designer`
+        );
+    } catch (err) {
+        console.error('❌ Error sending enquiry creation notifications:', err);
+    }
 
     return enquiry._id;
 };
@@ -167,36 +164,42 @@ exports.updateEnquiry = async (id, data, userId) => {
         let newAssignee = await userService.getUserById(data.AssignedTo);
         changes.push(`Assigned: from "${oldAssignee?.name}" to "${newAssignee?.name}"`);
 
-        // Notify the new assignee via socket
-        // const io = getIO();
-        if (newAssignee._id) {
-            // TODO
-            // io.to(`user_${newAssignee._id}`).emit('messageNotification', {
-            //     type: 'Updated',
-            //     message: `Enquiry #${id}. has updates. Click to check.`,
-            //     timestamp: new Date(),
-            // });
-            // Also send push notification
-            // this.handleEnquiryParticipants(enquiry._id, newAssignee._id, false);
-            // const subscription = await pushService.getSubscription(newAssignee._id);
-            // if (subscription) {
-            //     try {
-            //         await pushService.sendPush(newAssignee._id, {
-            //             title: `Enquiry Updated`,
-            //             body: `Enquiry #${id}. has updates. Click to check.`,
-            //             url: `${frontendUrl}/enquiries/${id}`
-            //         });
-            //     } catch (err) {
-            //         console.error(`Failed to push to user ${newAssignee._id}`, err);
-            //     }
-            // }
-        }
-
+        // TODO Notify the new assignee via socket
         // 🟢 Add new designer to admin-designer chat
         if (newAssignee?._id) {
             await chatService.addParticipantIfMissing(enquiry._id, 'admin-designer', newAssignee._id);
-        }
 
+            // 5️⃣ 🔔 Send notification to new assignee
+            try {
+                const tokens = userService.getTokensByIds([newAssignee._id]);
+
+                // 3️⃣ Send push notification (if device tokens exist)
+                if (tokens?.length > 0) {
+                    await pushService.sendPushToTokens(
+                        tokens,
+                        '🎨 New Enquiry Assigned',
+                        `You've been assigned to enquiry "${enquiry.Name}".`,
+                        {
+                            enquiryId: enquiry._id.toString(),
+                            type: 'enquiry_assigned',
+                        }
+                    );
+
+                    console.log(
+                        `📲 Sent FCM notification to new assignee ${newAssignee._id} for enquiry ${enquiry._id}`
+                    );
+                } else {
+                    console.log(
+                        `⚠️ No push tokens found for assigned user ${newAssignee._id}`
+                    );
+                }
+            } catch (err) {
+                console.error(
+                    `❌ Error adding designer or sending push notification for enquiry ${enquiry._id}:`,
+                    err
+                );
+            }
+        }
     }
 
     // 2️⃣ Client changed
@@ -229,21 +232,85 @@ exports.updateEnquiry = async (id, data, userId) => {
     return { _id: enquiry._id };
 };
 
-exports.handleAssetUpload = async (id, type, files, version, code, userId) => {
-    const enquiry = await repo.getEnquiryById(id);
-    if (!enquiry) throw new Error('Enquiry not found');
 
-    switch (type) {
-        case 'coral':
-            return await handleCoralUpload(enquiry, files, version, code, userId);
-        case 'cad':
-            return await handleCadUpload(enquiry, files, version, code, userId);
-        case 'reference':
-            return await handleReferenceImageUpload(enquiry, files, userId);
-        default:
-            throw new Error('Invalid asset type');
+exports.handleAssetUpload = async (id, type, files, version, code, userId) => {
+  const enquiry = await repo.getEnquiryById(id);
+  if (!enquiry) throw new Error('Enquiry not found');
+
+  // 1) perform the upload with the right handler
+  let uploadResult;
+  switch (type) {
+    case 'coral':
+      uploadResult = await handleCoralUpload(enquiry, files, version, code, userId);
+      break;
+    case 'cad':
+      uploadResult = await handleCadUpload(enquiry, files, version, code, userId);
+      break;
+    case 'reference':
+      uploadResult = await handleReferenceImageUpload(enquiry, files, userId);
+      break;
+    default:
+      throw new Error('Invalid asset type');
+  }
+
+  // 2) Notify admins (push) that an asset was uploaded
+  try {
+    // get admin role id (same pattern used elsewhere)
+    const roles = await codelistsService.getCodelistByName('Roles');
+    const adminRoleId = roles?.find((r) => r.Code === 'AD')?.Id;
+    if (adminRoleId) {
+      // get admin user ids
+      let adminIds = await userService.getUsersByRole(adminRoleId); // returns user ids array
+      if (adminIds && adminIds.length) {
+        // exclude the uploader (so user doesn't get notified about their own upload)
+        adminIds = adminIds.map((id) => id.toString()).filter((id) => id !== String(userId));
+
+        if (adminIds.length) {
+          // fetch tokens for those admin ids (fast repo function)
+          const adminTokens = userService.getTokensByIds(adminIds);
+
+          if (adminTokens && adminTokens.length) {
+            // prepare notification text
+            const fileCount = Array.isArray(files) ? files.length : 1;
+            const prettyType = type.charAt(0).toUpperCase() + type.slice(1);
+            const title = `New ${prettyType} uploaded`;
+            const body = `${fileCount} file${fileCount > 1 ? 's' : ''} uploaded for enquiry "${enquiry.Name || enquiry._id}"${version ? ` (version ${version})` : ''}${code ? ` — code: ${code}` : ''}.`;
+
+            // send push (data payload can help frontend navigate)
+            await pushService.sendPushToTokens(
+              adminTokens,
+              title,
+              body,
+              {
+                enquiryId: enquiry._id.toString(),
+                enquiryName: enquiry.Name || '',
+                type: 'asset_upload',
+                assetType: type,
+                uploaderId: String(userId),
+                version: version || '',
+              }
+            );
+
+            console.log(`📲 Sent upload notifications to ${adminTokens.length} admin devices for enquiry ${enquiry._id}`);
+          } else {
+            console.log(`⚠️ No FCM tokens found for adminIds: ${adminIds.join(', ')}`);
+          }
+        } else {
+          console.log('⚠️ No admins to notify after excluding uploader.');
+        }
+      }
+    } else {
+      console.log('⚠️ Admin role id not found, skipping admin notifications.');
     }
+  } catch (err) {
+    console.error(`❌ Error notifying admins after asset upload for enquiry ${id}:`, err);
+    // don't fail the main flow — upload already completed
+  }
+
+  // 3) return upload result to caller
+  return uploadResult;
 };
+
 
 exports.updateAssetData = async (enquiryId, type, version, data, userId) => {
     const enquiry = await repo.getEnquiryById(enquiryId);

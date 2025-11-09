@@ -13,6 +13,13 @@ const { createRolesCodelist } = require('./utils/populateCodelists');
 const app = express();
 const server = http.createServer(app);
 
+const admin = require("firebase-admin");
+const serviceAccount = require("./serviceAccountKey.json");
+
+admin.initializeApp({
+  credential: admin.credential.cert(serviceAccount),
+});
+
 // CORS setup
 app.use(cors({
   origin: [
@@ -35,11 +42,6 @@ const startApp = async () => {
 
   // Start WebSocket server
   initSocket(server);
-  pushService.initPushService(
-    process.env.VAPID_PUBLIC_KEY,
-    process.env.VAPID_PRIVATE_KEY,
-    process.env.GMAIL_USER
-  );
 
   // Start HTTP server
   const PORT = process.env.PORT || 5000;

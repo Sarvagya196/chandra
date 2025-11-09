@@ -1,32 +1,40 @@
-// pushNotificationService.js
-const webpush = require('web-push');
+const admin = require('firebase-admin');
 
-// In-memory storage (use DB in production)
-const subscriptions = {}; 
 
-function initPushService(publicVapidKey, privateVapidKey, email) {
-  webpush.setVapidDetails(`mailto:${email}`, publicVapidKey, privateVapidKey);
-}
+/**
+ * Send push notifications to a list of FCM tokens.
+ * @param {Array<String>} tokens - List of FCM device tokens
+ * @param {String} title - Notification title
+ * @param {String} body - Notification body
+ * @param {Object} [data={}] - Optional data payload
+ */
+exports.sendPushToTokens = async (tokens, title, body, data = {}) => {
+  if (!tokens || tokens.length === 0) {
+    console.log('⚠️ No FCM tokens provided for push');
+    return;
+  }
 
-function saveSubscription(userId, subscription) {
-  subscriptions[userId] = subscription;
-}
+  try {
+    // Build base message
+    const message = {
+      notification: { title, body },
+      data,
+    };
 
-function sendPush(userId, payload) {
-  const subscription = subscriptions[userId];
-  if (!subscription) return;
+    // 🚀 Batch send (instead of individual sends)
+    const batch = tokens.map(token => ({
+      token,
+      notification: message.notification,
+      data: message.data,
+    }));
 
-  return webpush.sendNotification(subscription, JSON.stringify(payload))
-    .catch(err => console.error('Push error:', err));
-}
+    // Use FCM batch sending
+    const response = await admin.messaging().sendEach(batch);
+    const successCount = response.successCount || 0;
+    const failureCount = response.failureCount || 0;
 
-function getSubscription(userId) {
-  return subscriptions[userId];
-}
-
-module.exports = {
-  initPushService,
-  saveSubscription,
-  sendPush,
-  getSubscription
+    console.log(`📩 Sent push: ${successCount} success, ${failureCount} failed`);
+  } catch (error) {
+    console.error('❌ Failed to send push notifications:', error);
+  }
 };
