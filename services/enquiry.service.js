@@ -101,7 +101,7 @@ exports.createEnquiry = async (data, userId) => {
 
     }
 
-    const adminRoleId = codelistsService.getCodelistByName("Roles")?.find(role => role.Code === "AD")?.Id;
+    const adminRoleId = await codelistsService.getCodelistByName("Roles")?.find(role => role.Code === "AD")?.Id;
     const adminIds = await userService.getUsersByRole(adminRoleId);
     const clientIds = await userService.getUsersByClient(enquiry.ClientId);
     const designerId = AssignedTo || null;
