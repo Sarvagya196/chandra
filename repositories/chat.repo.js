@@ -66,7 +66,7 @@ exports.getChatsForUserAgg = async (userId, page = 1, limit = 10, search = '') =
     const searchRegex = new RegExp(search, 'i');
     const orConditions = [{ EnquiryName: searchRegex }];
 
-    if (Types.ObjectId.isValid(search)) {
+    if (ObjectId.isValid(search)) {
       orConditions.push({ EnquiryId: new ObjectId(String(search)) });
     }
 
