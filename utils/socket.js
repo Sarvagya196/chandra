@@ -107,6 +107,7 @@ function initSocket(server) {
                 });
 
                 console.log(`💬 Message sent in chat ${chatId} by ${userId}`);
+                await chatService.updateLastMessage(chatId, savedMessage._id);
 
                 // 2️⃣ Emit to all users in the chat room (real-time)
                 io.to(`chat_${chatId}`).emit('newMessage', savedMessage);

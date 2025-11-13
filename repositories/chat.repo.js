@@ -198,6 +198,15 @@ exports.updateLastRead = async (chatId, userIds) => {
   return { success: true, updatedUsers: userIds, updatedAt: now };
 };
 
+exports.updateLastMessage = async (chatId, messageId) => {
+  return Chat.updateOne(
+    { _id: chatId },
+    {
+      $set: { LastMessage: messageId, UpdatedAt: new Date() }
+    }
+  );
+};
+
 
 exports.deleteChatsByEnquiryId = async (enquiryId) => {
   try {

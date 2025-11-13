@@ -183,3 +183,11 @@ exports.deleteChatsByEnquiryId = async (enquiryId) => {
     throw error;
   }
 };
+
+exports.updateLastMessage = async (chatId, messageId) => {
+  try {
+    await repo.updateLastMessage(chatId, messageId);
+  } catch (err) {
+    console.error(`❌ Failed to update last message for chat ${chatId}:`, err);
+  }
+};
