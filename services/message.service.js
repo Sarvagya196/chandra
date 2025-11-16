@@ -11,7 +11,6 @@ exports.createMessage = async (data) => {
     }
 };
 
-//TODO should this be in chatService ?
 //Delete all messages by chat Id
 exports.deleteMessagesByChatId = async (chatId) => {
     try {

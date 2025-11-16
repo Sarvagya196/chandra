@@ -9,6 +9,7 @@ const metalPricesRoutes = require('./metalPrices.routes');
 const chatRoutes = require('./chat.routes');
 const codelistsRoutes = require('./codelists.routes');
 const messageRoutes = require('./message.routes');
+const notificationsRoutes = require('./notifications.routes');
 
 router.use('/enquiries', enquiryRoutes);
 router.use('/clients', clientRoutes);
@@ -18,5 +19,6 @@ router.use('/metal-prices', metalPricesRoutes);
 router.use('/chats', chatRoutes);
 router.use('/message', messageRoutes);
 router.use('/codelists', codelistsRoutes);
+router.use('/notifications', notificationsRoutes);
 
 module.exports = router;

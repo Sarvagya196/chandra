@@ -8,6 +8,7 @@ const { v4: uuidv4 } = require('uuid');
 const xlsx = require('xlsx');
 const pushService = require('../services/pushNotification.service');
 const codelistsService = require('../services/codelists.service');
+const notificationService = require('../services/notifications.service');
 
 // Get all enquiries
 exports.getEnquiries = async () => {
@@ -67,36 +68,25 @@ exports.createEnquiry = async (data, userId) => {
     // 5️⃣ 🔔 Send notifications
     try {
         // Admin notifications
-        const adminTokens = userService.getTokensByIds(adminIds);
-
-        if (adminTokens.length > 0) {
-            await pushService.sendPushToTokens(
-                adminTokens,
-                '🆕 New Enquiry Created',
-                `New enquiry "${enquiry.Name}" has been created.`,
-                {
-                    enquiryId: enquiry._id.toString(),
-                    clientId: enquiry.ClientId.toString(),
-                    type: 'enquiry_created',
-                }
-            );
-        }
+        await notificationService.createAlertsForUsers(
+            adminIds, // 1. The array of user IDs
+            '🆕 New Enquiry Created', // 2. The title
+            `New enquiry "${enquiry.Name}" has been created.`, // 3. The body
+            'enquiry_created', // 4. The type
+            // `/enquiries/${enquiry._id.toString()}` // 5. The in-app link
+            `singleEnquiry` // 5. The in-app link TODO change to proper link
+        );
 
         // Designer notification (if assigned)
         if (designerId) {
-            const designerTokens = userService.getTokensByIds([designerId]);
-
-            if (designerTokens.length > 0) {
-                await pushService.sendPushToTokens(
-                    designerTokens,
-                    '🎨 New Enquiry Assigned',
-                    `You've been assigned enquiry "${enquiry.Name}".`,
-                    {
-                        enquiryId: enquiry._id.toString(),
-                        type: 'enquiry_assigned',
-                    }
-                );
-            }
+            await notificationService.createAlertsForUsers(
+                [designerId], // 1. The userId (as an array)
+                '🎨 New Enquiry Assigned', // 2. The title
+                `You've been assigned enquiry "${enquiry.Name}".`, // 3. The body
+                'enquiry_assigned', // 4. The type
+                // `/enquiries/${enquiry._id.toString()}` // 5. The in-app link
+                `singleEnquiry` // 5. The in-app link TODO change to proper link
+            );
         }
 
         console.log(
@@ -119,7 +109,7 @@ exports.deleteEnquiry = async (id) => {
             throw new Error('Enquiry not found');
         }
 
-        // 2️⃣ Delete all related messages TODO and send notification as well
+        // 2️⃣ Delete all related messages
         await chatService.deleteChatsByEnquiryId(id);
 
         // 3️⃣ Return the deleted enquiry
@@ -164,38 +154,25 @@ exports.updateEnquiry = async (id, data, userId) => {
         let newAssignee = await userService.getUserById(data.AssignedTo);
         changes.push(`Assigned: from "${oldAssignee?.name}" to "${newAssignee?.name}"`);
 
-        // TODO Notify the new assignee via socket
         // 🟢 Add new designer to admin-designer chat
         if (newAssignee?._id) {
             await chatService.addParticipantIfMissing(enquiry._id, 'admin-designer', newAssignee._id);
 
             // 5️⃣ 🔔 Send notification to new assignee
             try {
-                const tokens = userService.getTokensByIds([newAssignee._id]);
+                await notificationService.createAlertsForUsers(
+                    [newAssignee._id], // 1. The userId (as an array)
+                    '🎨 New Enquiry Assigned', // 2. The title
+                    `You've been assigned to enquiry "${enquiry.Name}".`, // 3. The body
+                    'enquiry_assigned', // 4. The type
+                    // `/enquiries/${enquiry._id.toString()}` // 5. The in-app link
+                    `SingleEnquiry` // 5. The in-app link TODO modify
+                );
 
-                // 3️⃣ Send push notification (if device tokens exist)
-                if (tokens?.length > 0) {
-                    await pushService.sendPushToTokens(
-                        tokens,
-                        '🎨 New Enquiry Assigned',
-                        `You've been assigned to enquiry "${enquiry.Name}".`,
-                        {
-                            enquiryId: enquiry._id.toString(),
-                            type: 'enquiry_assigned',
-                        }
-                    );
-
-                    console.log(
-                        `📲 Sent FCM notification to new assignee ${newAssignee._id} for enquiry ${enquiry._id}`
-                    );
-                } else {
-                    console.log(
-                        `⚠️ No push tokens found for assigned user ${newAssignee._id}`
-                    );
-                }
             } catch (err) {
+                // This will now catch errors from the database save (insertMany)
                 console.error(
-                    `❌ Error adding designer or sending push notification for enquiry ${enquiry._id}:`,
+                    `❌ Error creating notification for enquiry ${enquiry._id}:`,
                     err
                 );
             }
@@ -234,81 +211,71 @@ exports.updateEnquiry = async (id, data, userId) => {
 
 
 exports.handleAssetUpload = async (id, type, files, version, code, userId) => {
-  const enquiry = await repo.getEnquiryById(id);
-  if (!enquiry) throw new Error('Enquiry not found');
+    const enquiry = await repo.getEnquiryById(id);
+    if (!enquiry) throw new Error('Enquiry not found');
 
-  // 1) perform the upload with the right handler
-  let uploadResult;
-  switch (type) {
-    case 'coral':
-      uploadResult = await handleCoralUpload(enquiry, files, version, code, userId);
-      break;
-    case 'cad':
-      uploadResult = await handleCadUpload(enquiry, files, version, code, userId);
-      break;
-    case 'reference':
-      uploadResult = await handleReferenceImageUpload(enquiry, files, userId);
-      break;
-    default:
-      throw new Error('Invalid asset type');
-  }
-
-  // 2) Notify admins (push) that an asset was uploaded
-  try {
-    // get admin role id (same pattern used elsewhere)
-    const roles = await codelistsService.getCodelistByName('Roles');
-    const adminRoleId = roles?.find((r) => r.Code === 'AD')?.Id;
-    if (adminRoleId) {
-      // get admin user ids
-      let adminIds = await userService.getUsersByRole(adminRoleId); // returns user ids array
-      if (adminIds && adminIds.length) {
-        // exclude the uploader (so user doesn't get notified about their own upload)
-        adminIds = adminIds.map((id) => id.toString()).filter((id) => id !== String(userId));
-
-        if (adminIds.length) {
-          // fetch tokens for those admin ids (fast repo function)
-          const adminTokens = userService.getTokensByIds(adminIds);
-
-          if (adminTokens && adminTokens.length) {
-            // prepare notification text
-            const fileCount = Array.isArray(files) ? files.length : 1;
-            const prettyType = type.charAt(0).toUpperCase() + type.slice(1);
-            const title = `New ${prettyType} uploaded`;
-            const body = `${fileCount} file${fileCount > 1 ? 's' : ''} uploaded for enquiry "${enquiry.Name || enquiry._id}"${version ? ` (version ${version})` : ''}${code ? ` — code: ${code}` : ''}.`;
-
-            // send push (data payload can help frontend navigate)
-            await pushService.sendPushToTokens(
-              adminTokens,
-              title,
-              body,
-              {
-                enquiryId: enquiry._id.toString(),
-                enquiryName: enquiry.Name || '',
-                type: 'asset_upload',
-                assetType: type,
-                uploaderId: String(userId),
-                version: version || '',
-              }
-            );
-
-            console.log(`📲 Sent upload notifications to ${adminTokens.length} admin devices for enquiry ${enquiry._id}`);
-          } else {
-            console.log(`⚠️ No FCM tokens found for adminIds: ${adminIds.join(', ')}`);
-          }
-        } else {
-          console.log('⚠️ No admins to notify after excluding uploader.');
-        }
-      }
-    } else {
-      console.log('⚠️ Admin role id not found, skipping admin notifications.');
+    // 1) perform the upload with the right handler
+    let uploadResult;
+    switch (type) {
+        case 'coral':
+            uploadResult = await handleCoralUpload(enquiry, files, version, code, userId);
+            break;
+        case 'cad':
+            uploadResult = await handleCadUpload(enquiry, files, version, code, userId);
+            break;
+        case 'reference':
+            uploadResult = await handleReferenceImageUpload(enquiry, files, userId);
+            break;
+        default:
+            throw new Error('Invalid asset type');
     }
-  } catch (err) {
-    console.error(`❌ Error notifying admins after asset upload for enquiry ${id}:`, err);
-    // don't fail the main flow — upload already completed
-  }
 
-  // 3) return upload result to caller
-  return uploadResult;
+    // 2) Notify admins (push) that an asset was uploaded
+    try {
+        // get admin role id (same pattern used elsewhere)
+        const roles = await codelistsService.getCodelistByName('Roles');
+        const adminRoleId = roles?.find((r) => r.Code === 'AD')?.Id;
+        if (adminRoleId) {
+            // get admin user ids
+            let adminIds = await userService.getUsersByRole(adminRoleId); // returns user ids array
+            if (adminIds && adminIds.length) {
+                // 1. Filter out the uploader
+                const adminIdsToNotify = adminIds
+                    .map((id) => id.toString())
+                    .filter((id) => id !== String(userId));
+
+                if (adminIdsToNotify.length > 0) {
+                    // 2. Prepare the notification content
+                    const fileCount = Array.isArray(files) ? files.length : 1;
+                    const prettyType = type.charAt(0)?.toUpperCase() + type.slice(1);
+                    const title = `New ${prettyType} uploaded`;
+                    const body = `${fileCount} file${fileCount > 1 ? 's' : ''
+                        } uploaded for enquiry "${enquiry.Name || enquiry._id}"${version ? ` (version ${version})` : ''
+                        }.`;
+                    const link = `/enquiries/${enquiry._id.toString()}`; //TODO change
+
+                    // 3. Call the new service (replaces the entire old block)
+                    await notificationService.createAlertsForUsers(
+                        adminIdsToNotify,
+                        title,
+                        body,
+                        'asset_upload', // The type
+                        link
+                    );
+                } else {
+                    console.log('⚠️ No admins to notify after excluding uploader.');
+                }
+            }
+        } else {
+            console.log('⚠️ Admin role id not found, skipping admin notifications.');
+        }
+    } catch (err) {
+        console.error(`❌ Error notifying admins after asset upload for enquiry ${id}:`, err);
+        // don't fail the main flow — upload already completed
+    }
+
+    // 3) return upload result to caller
+    return uploadResult;
 };
 
 
@@ -358,11 +325,11 @@ exports.updateAssetData = async (enquiryId, type, version, data, userId) => {
                     enquiry.StatusHistory.push(statusEntry);
                 }
 
-                if(data.ShowToClient !== undefined && data.ShowToClient !== null) {
+                if (data.ShowToClient !== undefined && data.ShowToClient !== null) {
                     updatedCoral.ShowToClient = data.ShowToClient;
                 }
 
-                if(data.CoralCode !== undefined && data.CoralCode !== null) {
+                if (data.CoralCode !== undefined && data.CoralCode !== null) {
                     updatedCoral.CoralCode = data.CoralCode;
                 }
 
@@ -375,8 +342,8 @@ exports.updateAssetData = async (enquiryId, type, version, data, userId) => {
                     });
                 }
 
-                if(data.Delete === true) {
-                    if(data.Id) {
+                if (data.Delete === true) {
+                    if (data.Id) {
                         updatedCoral.Images = updatedCoral.Images.filter(image => image.Id !== data.Id);
                     } else {
                         //delete entire version
@@ -392,9 +359,9 @@ exports.updateAssetData = async (enquiryId, type, version, data, userId) => {
                         enquiry.StatusHistory.push(statusEntry);
                     }
                 }
-                
+
                 // Replace the item at the found index only if not deleting entire version
-                if(!(data.Delete === true && !data.Id)) {
+                if (!(data.Delete === true && !data.Id)) {
                     enquiry.Coral[coralIndex] = updatedCoral;
                 }
             }
@@ -444,11 +411,11 @@ exports.updateAssetData = async (enquiryId, type, version, data, userId) => {
                     enquiry.StatusHistory.push(statusEntry);
                 }
 
-                if(data.CadCode !== undefined && data.CadCode !== null) {
+                if (data.CadCode !== undefined && data.CadCode !== null) {
                     updatedCad.CadCode = data.CadCode;
                 }
 
-                if(data.ShowToClient !== undefined && data.ShowToClient !== null) {
+                if (data.ShowToClient !== undefined && data.ShowToClient !== null) {
                     updatedCad.ShowToClient = data.ShowToClient;
                 }
 
@@ -461,8 +428,8 @@ exports.updateAssetData = async (enquiryId, type, version, data, userId) => {
                     });
                 }
 
-                if(data.Delete === true) {
-                    if(data.Id) {
+                if (data.Delete === true) {
+                    if (data.Id) {
                         updatedCad.Images = updatedCad.Images.filter(image => image.Id !== data.Id);
                     } else {
                         //delete entire version
@@ -479,7 +446,7 @@ exports.updateAssetData = async (enquiryId, type, version, data, userId) => {
                 }
 
                 // Replace the item at the found index only if not deleting entire version
-                if(!(data.Delete === true && !data.Id)) {
+                if (!(data.Delete === true && !data.Id)) {
                     enquiry.Cad[cadIndex] = updatedCad;
                 }
             }
@@ -788,7 +755,7 @@ async function handleExcelDataForCoral(file) {
         const SieveSize = row['SIEVE SIZE']?.toString().trim();
         const Weight = parseFloat(row['AVRG WT']) || 0;
         const Pcs = parseInt(row['PCS']) || 0;
-        const CtWeight = row['CT WT']? Math.trunc(parseFloat(row['CT WT']) * 1000) / 1000 : 0;
+        const CtWeight = row['CT WT'] ? Math.trunc(parseFloat(row['CT WT']) * 1000) / 1000 : 0;
 
         // Accumulate total pieces
         totalPieces += Pcs;
@@ -852,9 +819,9 @@ async function handleExcelDataForCad(file) {
         const SieveSize = row['Size']?.toString().trim().match(/[\d.]+(?:-[\d.]+)?/)?.[0] || '';
         const Weight = parseFloat(row['AVRG WT']) || 0;
         const Pcs = parseInt(row['Pcs']) || 0;
-        const CtWeight = row['Weight']? Math.trunc(parseFloat(row['Weight']) * 1000) / 1000 : 0;
+        const CtWeight = row['Weight'] ? Math.trunc(parseFloat(row['Weight']) * 1000) / 1000 : 0;
 
-        if(index === 0 ) {
+        if (index === 0) {
             metalWeight = CtWeight;
             index++;
             continue;
@@ -890,7 +857,7 @@ async function handleExcelDataForCad(file) {
 }
 
 exports.searchEnquiries = async (queryParams) => {
-    
+
     // --- 1. Prepare Pagination ---
     const page = parseInt(queryParams.page, 10) || 1;
     const limit = parseInt(queryParams.limit, 10) || 25;
@@ -971,10 +938,10 @@ exports.calculatePricing = async (pricingDetails, clientId) => {
         const quality = pricingDetails.Metal.Quality?.toUpperCase();
         const match = quality?.match(/^(\d{1,2})K$/);
         if (match) {
-        const karat = parseInt(match[1], 10);
-        metalRate = (goldRate * karat) / 24;
+            const karat = parseInt(match[1], 10);
+            metalRate = (goldRate * karat) / 24;
         } else {
-        throw new Error(`Invalid gold quality: ${quality}`);
+            throw new Error(`Invalid gold quality: ${quality}`);
         }
     }
 
@@ -1027,17 +994,17 @@ exports.calculatePricing = async (pricingDetails, clientId) => {
     metalPrice = parseFloat(metalWeight * ((metalRate * (1 + lossFactor)) + labour).toFixed(3));
 
     let undercutDiamondsPrice = 0;
-    if(undercutPrice > 0) {
+    if (undercutPrice > 0) {
         undercutDiamondsPrice = stones.reduce((acc, stone) => {
-        const ratePerCaratOfStone = stone.Price > undercutPrice ? undercutPrice : stone.Price;
-        return acc + (stone.CtWeight * ratePerCaratOfStone);
-      }, 0);
+            const ratePerCaratOfStone = stone.Price > undercutPrice ? undercutPrice : stone.Price;
+            return acc + (stone.CtWeight * ratePerCaratOfStone);
+        }, 0);
     }
 
     const subtotal = ((metalPrice + (undercutPrice > 0 ? undercutDiamondsPrice : diamondsPrice)) * quantity) + extraCharges;
     let dutiesAmount = subtotal * (duties / 100);
 
-    const totalPrice = ((metalPrice +  diamondsPrice) * quantity) + extraCharges + dutiesAmount;
+    const totalPrice = ((metalPrice + diamondsPrice) * quantity) + extraCharges + dutiesAmount;
 
     return {
         MetalPrice: parseFloat(metalPrice.toFixed(3)),
