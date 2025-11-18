@@ -1,0 +1,70 @@
+const express = require('express');
+const cors = require('cors');
+const mongoose = require('mongoose');
+require('dotenv').config();
+const bodyParser = require('body-parser');
+const http = require('http');
+const connectDB = require('./config/db');
+const routes = require('./routes');
+const initSocket = require('./utils/socket'); // 🧠 Import socket logic
+const pushService = require('./services/pushNotification.service');
+const { createRolesCodelist } = require('./utils/populateCodelists');
+const apiLogger = require('./middleware/apiLogger');
+
+const app = express();
+const server = http.createServer(app);
+
+// Trust proxy for accurate IP logging
+app.set('trust proxy', true);
+
+const admin = require("firebase-admin");
+const serviceAccount = require("./serviceAccountKey.json");
+
+admin.initializeApp({
+  credential: admin.credential.cert(serviceAccount),
+});
+
+// CORS setup
+app.use(cors({
+  origin: [
+    'http://localhost:4200',
+    'https://workflow-ui-virid.vercel.app'
+  ],
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization'],
+  credentials: true
+}));
+
+app.use(bodyParser.json());
+app.use(express.static('public'));
+
+// API Logger Middleware - Log all API calls
+app.use('/api', apiLogger);
+
+// API routes
+app.use('/api', routes);
+
+// Initialize DB and Server
+const startApp = async () => {
+  await connectDB();
+
+  // Clean up any invalid chat documents with null values
+  try {
+    const Chat = require('./models/chat.model');
+    await Chat.cleanupInvalidChats();
+  } catch (err) {
+    console.error('Error during chat cleanup on startup:', err);
+  }
+
+  // Start WebSocket server
+  initSocket(server);
+
+  // Start HTTP server
+  const PORT = process.env.PORT || 5000;
+  server.listen(PORT, () => {
+    console.log(`🚀 Server running on port ${PORT}`);
+    // createRolesCodelist(); populate roles codelist
+  });
+};
+
+startApp();
