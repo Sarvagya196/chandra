@@ -32,7 +32,7 @@ exports.getEnquiriesByUserId = async (userId) => {
 
 exports.createEnquiry = async (data, userId) => {
     const { AssignedTo, Status, ...rest } = data;
-
+    console.log(data);
     const StatusHistory = [
         {
             Status: 'Enquiry Created',
@@ -57,13 +57,38 @@ exports.createEnquiry = async (data, userId) => {
 
     const enquiry = await repo.createEnquiry(enquiryData);
 
+
+
+
+    // Validate enquiry was created successfully
+    if (!enquiry || !enquiry._id) {
+        throw new Error('Failed to create enquiry: enquiry or enquiry._id is null/undefined');
+    }
+
     const adminRoleId = (await codelistsService.getCodelistByName("Roles"))?.find(role => role.Code === "AD")?.Id;
     const adminIds = await userService.getUsersByRole(adminRoleId);
     const clientIds = await userService.getUsersByClient(enquiry.ClientId);
     const designerId = AssignedTo || null;
 
-    await chatService.createChat(enquiry._id, enquiry.Name, 'admin-client', [...adminIds, ...clientIds]);
-    await chatService.createChat(enquiry._id, enquiry.Name, 'admin-designer', designerId ? [...adminIds, designerId] : [...adminIds]);
+    // Create chats with error handling to prevent duplicate key errors
+    try {
+        await chatService.createChat(enquiry._id, enquiry.Name, 'admin-client', [...adminIds, ...clientIds]);
+    } catch (chatError) {
+        console.error(`Error creating admin-client chat for Enquiry ${enquiry._id}:`, chatError);
+        // If chat creation fails, delete the enquiry to maintain data consistency
+        await repo.deleteEnquiry(enquiry._id);
+        throw new Error(`Failed to create admin-client chat: ${chatError.message}`);
+    }
+
+    try {
+        await chatService.createChat(enquiry._id, enquiry.Name, 'admin-designer', designerId ? [...adminIds, designerId] : [...adminIds]);
+    } catch (chatError) {
+        console.error(`Error creating admin-designer chat for Enquiry ${enquiry._id}:`, chatError);
+        // If chat creation fails, delete the enquiry and the other chat to maintain data consistency
+        await chatService.deleteChatsByEnquiryId(enquiry._id);
+        await repo.deleteEnquiry(enquiry._id);
+        throw new Error(`Failed to create admin-designer chat: ${chatError.message}`);
+    }
 
     // 5️⃣ 🔔 Send notifications
     try {
@@ -181,6 +206,7 @@ exports.updateEnquiry = async (id, data, userId) => {
 
     // 2️⃣ Client changed
     if (enquiry.ClientId != data.ClientId) {
+        console.log("Client changed", enquiry.ClientId, data.ClientId);
         const adminRoleId = codelistsService.getCodelistByName("Roles")
             ?.find(role => role.Code === "AD")?.Id;
         const adminIds = await userService.getUsersByRole(adminRoleId);
@@ -857,7 +883,6 @@ async function handleExcelDataForCad(file) {
 }
 
 exports.searchEnquiries = async (queryParams) => {
-
     // --- 1. Prepare Pagination ---
     const page = parseInt(queryParams.page, 10) || 1;
     const limit = parseInt(queryParams.limit, 10) || 25;

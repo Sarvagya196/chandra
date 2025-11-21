@@ -155,7 +155,7 @@ function initSocket(server) {
 
                 try {
                     // 1️⃣ Fetch users with their tokens
-                    const offlineTokens = userService.getTokensByIds(offlineUserIds);
+                    const offlineTokens = await userService.getTokensByIds(offlineUserIds);
 
                     if (offlineTokens.length === 0) {
                         console.log(`⚠️ No FCM tokens found for offline users in chat ${chatId}`);

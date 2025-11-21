@@ -36,8 +36,8 @@ exports.getTokensByIds = async (userIds) => {
   if (!userIds?.length) return [];
 
   const users = await User.find(
-    { _id: { $in: userIds }, PushTokens: { $exists: true, $ne: [] } },
-    { PushTokens: 1 }
+    { _id: { $in: userIds }, pushTokens: { $exists: true, $ne: [] } },
+    { pushTokens: 1 }
   ).lean();
 
   return users.flatMap((u) => u.pushTokens || []);

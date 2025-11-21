@@ -22,4 +22,4 @@ exports.savePushToken = async (userId, token) => {
   return await repo.savePushToken(userId, token);
 };
 
-exports.getTokensByIds = (userIds) => repo.getTokensByIds(userIds);
+exports.getTokensByIds = async (userIds) => await repo.getTokensByIds(userIds);

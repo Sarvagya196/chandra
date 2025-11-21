@@ -9,9 +9,13 @@ const routes = require('./routes');
 const initSocket = require('./utils/socket'); // 🧠 Import socket logic
 const pushService = require('./services/pushNotification.service');
 const { createRolesCodelist } = require('./utils/populateCodelists');
+const apiLogger = require('./middleware/apiLogger');
 
 const app = express();
 const server = http.createServer(app);
+
+// Trust proxy for accurate IP logging
+app.set('trust proxy', true);
 
 const admin = require("firebase-admin");
 const serviceAccount = require("./serviceAccountKey.json");
@@ -34,12 +38,23 @@ app.use(cors({
 app.use(bodyParser.json());
 app.use(express.static('public'));
 
+// API Logger Middleware - Log all API calls
+app.use('/api', apiLogger);
+
 // API routes
 app.use('/api', routes);
 
 // Initialize DB and Server
 const startApp = async () => {
   await connectDB();
+
+  // Clean up any invalid chat documents with null values
+  try {
+    const Chat = require('./models/chat.model');
+    await Chat.cleanupInvalidChats();
+  } catch (err) {
+    console.error('Error during chat cleanup on startup:', err);
+  }
 
   // Start WebSocket server
   initSocket(server);

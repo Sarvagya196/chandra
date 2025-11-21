@@ -24,6 +24,7 @@ router.post("/", async(req, res) => {
         {
             Id: user._id,
             Role: user.role,
+            ClientId: user.clientId||null,
         },
             process.env.JWT_SECRET
         );
