@@ -9,6 +9,7 @@ const routes = require('./routes');
 const initSocket = require('./utils/socket'); // 🧠 Import socket logic
 const pushService = require('./services/pushNotification.service');
 const { createRolesCodelist } = require('./utils/populateCodelists');
+const { createStatusCodelist } = require('./utils/populateCodelists');
 
 const app = express();
 const server = http.createServer(app);
@@ -49,6 +50,7 @@ const startApp = async () => {
   server.listen(PORT, () => {
     console.log(`🚀 Server running on port ${PORT}`);
     // createRolesCodelist(); populate roles codelist
+    // createStatusCodelist(); populate status codelist
   });
 };
 
