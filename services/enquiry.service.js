@@ -848,7 +848,7 @@ async function handleExcelDataForCad(file) {
 
     return {
         Stones: stones,
-        DiamondWeight: diamondWeight.toFixed(3),
+        DiamondWeight: diamondWeight?.toFixed(3),
         Metal: {
             Weight: metalWeight,
         },
@@ -982,8 +982,8 @@ exports.calculatePricing = async (pricingDetails, clientId) => {
             if (ratePerCaratOfStone === undefined || ratePerCaratOfStone === null || ratePerCaratOfStone <= 0) {
                 diamondPriceNotFound = true;
             }
-            acc.diamondsPrice += parseFloat(stone.CtWeight.toFixed(3)) * ratePerCaratOfStone;
-            acc.diamondWeight += parseFloat(stone.CtWeight.toFixed(3));
+            acc.diamondsPrice += parseFloat(stone.CtWeight?.toFixed(3)) * ratePerCaratOfStone;
+            acc.diamondWeight += parseFloat(stone.CtWeight?.toFixed(3));
             return acc;
         },
         { diamondsPrice: 0, diamondWeight: 0 }
@@ -991,7 +991,7 @@ exports.calculatePricing = async (pricingDetails, clientId) => {
 
     // Calculate Metal Price
     const lossFactor = loss / 100;
-    metalPrice = parseFloat(metalWeight * ((metalRate * (1 + lossFactor)) + labour).toFixed(3));
+    metalPrice = parseFloat(metalWeight * ((metalRate * (1 + lossFactor)) + labour)?.toFixed(3));
 
     let undercutDiamondsPrice = 0;
     if (undercutPrice > 0) {
@@ -1007,13 +1007,13 @@ exports.calculatePricing = async (pricingDetails, clientId) => {
     const totalPrice = ((metalPrice + diamondsPrice) * quantity) + extraCharges + dutiesAmount;
 
     return {
-        MetalPrice: parseFloat(metalPrice.toFixed(3)),
-        DiamondsPrice: diamondPriceNotFound ? 0 : parseFloat(diamondsPrice.toFixed(3)),
-        TotalPrice: parseFloat(totalPrice.toFixed(3)),
+        MetalPrice: parseFloat(metalPrice?.toFixed(3)),
+        DiamondsPrice: diamondPriceNotFound ? 0 : parseFloat(diamondsPrice?.toFixed(3)),
+        TotalPrice: parseFloat(totalPrice?.toFixed(3)),
         Metal: {
             Weight: metalWeight,
             Quality: metalQuality,
-            Rate: parseFloat(metalFullRate).toFixed(3)
+            Rate: parseFloat(metalFullRate)?.toFixed(3)
         },
         DiamondWeight: parseFloat(diamondWeight?.toFixed(3)),
         TotalPieces: pricingDetails.TotalPieces,
@@ -1030,7 +1030,7 @@ exports.calculatePricing = async (pricingDetails, clientId) => {
             MmSize: stone.MmSize,
             SieveSize: stone.SieveSize,
             Weight: stone.Weight,
-            Price: parseFloat(stone.Price.toFixed(3)),
+            Price: parseFloat(stone.Price?.toFixed(3)),
             Pcs: stone.Pcs,
             CtWeight: stone.CtWeight
         }))
