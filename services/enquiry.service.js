@@ -181,7 +181,7 @@ exports.updateEnquiry = async (id, data, userId) => {
 
     // 2️⃣ Client changed
     if (enquiry.ClientId != data.ClientId) {
-        const adminRoleId = codelistsService.getCodelistByName("Roles")
+        const adminRoleId = (await codelistsService.getCodelistByName("Roles"))
             ?.find(role => role.Code === "AD")?.Id;
         const adminIds = await userService.getUsersByRole(adminRoleId);
         const newClientIds = await userService.getUsersByClient(data.ClientId);
@@ -814,12 +814,12 @@ async function handleExcelDataForCad(file) {
     for (const row of jsonData) {
         const Color = row['DIA/COL']?.toString().trim();
         // take only last 2 chars of ItemCode as shape, because it contains other info too TODO change if anything comes up in testing
-        const Shape = row['ItemCode']?.toString().trim().slice(-2) || '';
+        const Shape = row['ST SHAPE']?.toString().trim() || '';
         const MmSize = row['MM SIZE']?.toString().trim();
-        const SieveSize = row['Size']?.toString().trim().match(/[\d.]+(?:-[\d.]+)?/)?.[0] || '';
+        const SieveSize = row['SIEVE SIZE']?.toString().trim().match(/[\d.]+(?:-[\d.]+)?/)?.[0] || '';
         const Weight = parseFloat(row['AVRG WT']) || 0;
-        const Pcs = parseInt(row['Pcs']) || 0;
-        const CtWeight = row['Weight'] ? Math.trunc(parseFloat(row['Weight']) * 1000) / 1000 : 0;
+        const Pcs = parseInt(row['PCS']) || 0;
+        const CtWeight = row['CT WT'] ? Math.trunc(parseFloat(row['CT WT']) * 1000) / 1000 : 0;
 
         if (index === 0) {
             metalWeight = CtWeight;
