@@ -795,7 +795,6 @@ async function handleExcelDataForCoral(file) {
     };
 }
 
-//TODO, change to previous format only
 async function handleExcelDataForCad(file) {
     if (!file || !file.buffer) {
         return;
@@ -807,13 +806,11 @@ async function handleExcelDataForCad(file) {
 
     let stones = [];
     let diamondWeight = 0;
-    let metalWeight = null;
+    let metalWeight = 0;
     let totalPieces = 0;
 
-    let index = 0;
     for (const row of jsonData) {
         const Color = row['DIA/COL']?.toString()?.trim();
-        // take only last 2 chars of ItemCode as shape, because it contains other info too TODO change if anything comes up in testing
         const Shape = row['ST SHAPE']?.toString()?.trim() || '';
         const MmSize = row['MM SIZE']?.toString()?.trim();
         const SieveSize = row['SIEVE SIZE']?.toString()?.trim().match(/[\d.]+(?:-[\d.]+)?/)?.[0] || '';
@@ -821,14 +818,18 @@ async function handleExcelDataForCad(file) {
         const Pcs = parseInt(row['PCS']) || 0;
         const CtWeight = row['CT WT'] ? Math.trunc(parseFloat(row['CT WT']) * 1000) / 1000 : 0;
 
-        if (index === 0) {
-            metalWeight = CtWeight;
-            index++;
-            continue;
-        }
         // Accumulate total pieces
         totalPieces += Pcs;
-        diamondWeight += CtWeight;
+        
+        // Extract goldWeight if present
+        if (!metalWeight && row['METAL WEIGHT']) {
+            metalWeight = row['METAL WEIGHT'].toString()?.trim();
+        }
+
+        // Extract diamondWeight if present (optional)
+        if (!diamondWeight && row['T.DIA WT']) {
+            diamondWeight = row['T.DIA WT'].toString()?.trim();
+        }
 
 
         // If it's a valid stone row (with shape), include it
@@ -850,7 +851,7 @@ async function handleExcelDataForCad(file) {
         Stones: stones,
         DiamondWeight: diamondWeight?.toFixed(3),
         Metal: {
-            Weight: metalWeight,
+            Weight: metalWeight?.toFixed(3),
         },
         TotalPieces: totalPieces
     };

@@ -5,7 +5,7 @@ const authenticateToken = require('../middleware/authenticateToken');
 const dynamicUpload = require('../middleware/dynamicUpload');
 
 // GET all enquiries
-router.get('/', authenticateToken, controller.getEnquiries);
+// router.get('/', authenticateToken, controller.getEnquiries);
 
 // Search
 router.get('/search', authenticateToken, controller.searchEnquiries);
@@ -17,7 +17,7 @@ router.get('/aggregate', authenticateToken, controller.getAggregatedCounts);
 router.get('/:id', authenticateToken, controller.getEnquiryById);
 
 // GET enquiries by clientId
-router.get('/client/:clientId', authenticateToken, controller.getEnquiriesByClientId);
+// router.get('/client/:clientId', authenticateToken, controller.getEnquiriesByClientId);
 
 // POST a new enquiry
 router.post('/', authenticateToken, controller.createEnquiry);
@@ -36,7 +36,8 @@ router.post(
     controller.uploadAssets // Third middleware: Processing the uploaded files
 );
 
-router.get('/user/:userId', authenticateToken, controller.getEnquiriesByUserId)
+// GET enquiries by userId
+// router.get('/user/:userId', authenticateToken, controller.getEnquiriesByUserId)
 
 //Update asset details, marking as approved, 
 router.put('/:id/upload/:type',
