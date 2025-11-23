@@ -961,10 +961,12 @@ exports.calculatePricing = async (pricingDetails, clientId) => {
 
         // Calculate Diamonds Price
         stones = stones.map(stone => {
+            const stoneSize = normalizeMmSize(stone.MmSize);
+
             const matchingDiamond = client.Pricing.Diamonds.find(diamond =>
                 diamond.Type === stone.Type &&
                 diamond.Shape === stone.Shape &&
-                diamond.MmSize?.trim() === stone.MmSize?.trim()
+                normalizeMmSize(diamond.MmSize) === stoneSize
             );
 
             const Price = matchingDiamond ? matchingDiamond.Price ?? 0 : 0;
@@ -974,6 +976,7 @@ exports.calculatePricing = async (pricingDetails, clientId) => {
                 Price
             };
         });
+
     }
 
     // Calculate Diamonds Price
@@ -1038,6 +1041,32 @@ exports.calculatePricing = async (pricingDetails, clientId) => {
     };
 
 }
+
+function normalizeMmSize(value) {
+    if (!value) return "";
+
+    // Convert to lowercase and trim spaces
+    value = value.toLowerCase().trim();
+
+    // Remove all spaces
+    value = value.replace(/\s+/g, "");
+
+    // If it's a range "2x3"
+    if (value.includes("x")) {
+        const parts = value.split("x").map(v => normalizeNumber(v));
+        return parts.join("x"); // "2x3"
+    }
+
+    // If it's a single number "1.00"
+    return normalizeNumber(value);
+}
+
+// Normalize a single number
+function normalizeNumber(num) {
+    const n = parseFloat(num);
+    return isNaN(n) ? num : n.toString();  
+}
+
 
 exports.getPresignedUrl = async (key, action) => {
     return await generatePresignedUrl(key, action);
