@@ -749,10 +749,10 @@ async function handleExcelDataForCoral(file) {
     let totalPieces = 0;
 
     for (const row of jsonData) {
-        const Color = row['DIA/COL']?.toString().trim();
-        const Shape = row['ST SHAPE']?.toString().trim();
-        const MmSize = row['MM SIZE']?.toString().trim();
-        const SieveSize = row['SIEVE SIZE']?.toString().trim();
+        const Color = row['DIA/COL']?.toString()?.trim();
+        const Shape = row['ST SHAPE']?.toString()?.trim();
+        const MmSize = row['MM SIZE']?.toString()?.trim();
+        const SieveSize = row['SIEVE SIZE']?.toString()?.trim();
         const Weight = parseFloat(row['AVRG WT']) || 0;
         const Pcs = parseInt(row['PCS']) || 0;
         const CtWeight = row['CT WT'] ? Math.trunc(parseFloat(row['CT WT']) * 1000) / 1000 : 0;
@@ -775,12 +775,12 @@ async function handleExcelDataForCoral(file) {
 
         // Extract goldWeight if present
         if (!metalWeight && row['METAL WEIGHT']) {
-            metalWeight = row['METAL WEIGHT'].toString().trim();
+            metalWeight = row['METAL WEIGHT'].toString()?.trim();
         }
 
         // Extract diamondWeight if present (optional)
         if (!diamondWeight && row['T.DIA WT']) {
-            diamondWeight = row['T.DIA WT'].toString().trim();
+            diamondWeight = row['T.DIA WT'].toString()?.trim();
         }
     }
 
@@ -795,7 +795,6 @@ async function handleExcelDataForCoral(file) {
     };
 }
 
-//TODO, change to previous format only
 async function handleExcelDataForCad(file) {
     if (!file || !file.buffer) {
         return;
@@ -807,28 +806,30 @@ async function handleExcelDataForCad(file) {
 
     let stones = [];
     let diamondWeight = 0;
-    let metalWeight = null;
+    let metalWeight = 0;
     let totalPieces = 0;
 
-    let index = 0;
     for (const row of jsonData) {
-        const Color = row['DIA/COL']?.toString().trim();
-        // take only last 2 chars of ItemCode as shape, because it contains other info too TODO change if anything comes up in testing
-        const Shape = row['ItemCode']?.toString().trim().slice(-2) || '';
-        const MmSize = row['MM SIZE']?.toString().trim();
-        const SieveSize = row['Size']?.toString().trim().match(/[\d.]+(?:-[\d.]+)?/)?.[0] || '';
+        const Color = row['DIA/COL']?.toString()?.trim();
+        const Shape = row['ST SHAPE']?.toString()?.trim() || '';
+        const MmSize = row['MM SIZE']?.toString()?.trim();
+        const SieveSize = row['SIEVE SIZE']?.toString()?.trim().match(/[\d.]+(?:-[\d.]+)?/)?.[0] || '';
         const Weight = parseFloat(row['AVRG WT']) || 0;
-        const Pcs = parseInt(row['Pcs']) || 0;
-        const CtWeight = row['Weight'] ? Math.trunc(parseFloat(row['Weight']) * 1000) / 1000 : 0;
+        const Pcs = parseInt(row['PCS']) || 0;
+        const CtWeight = row['CT WT'] ? Math.trunc(parseFloat(row['CT WT']) * 1000) / 1000 : 0;
 
-        if (index === 0) {
-            metalWeight = CtWeight;
-            index++;
-            continue;
-        }
         // Accumulate total pieces
         totalPieces += Pcs;
-        diamondWeight += CtWeight;
+        
+        // Extract goldWeight if present
+        if (!metalWeight && row['METAL WEIGHT']) {
+            metalWeight = row['METAL WEIGHT'].toString()?.trim();
+        }
+
+        // Extract diamondWeight if present (optional)
+        if (!diamondWeight && row['T.DIA WT']) {
+            diamondWeight = row['T.DIA WT'].toString()?.trim();
+        }
 
 
         // If it's a valid stone row (with shape), include it
@@ -848,9 +849,9 @@ async function handleExcelDataForCad(file) {
 
     return {
         Stones: stones,
-        DiamondWeight: diamondWeight.toFixed(3),
+        DiamondWeight: diamondWeight?.toFixed(3),
         Metal: {
-            Weight: metalWeight,
+            Weight: metalWeight?.toFixed(3),
         },
         TotalPieces: totalPieces
     };
@@ -959,10 +960,12 @@ exports.calculatePricing = async (pricingDetails, clientId) => {
 
         // Calculate Diamonds Price
         stones = stones.map(stone => {
+            const stoneSize = normalizeMmSize(stone.MmSize);
+
             const matchingDiamond = client.Pricing.Diamonds.find(diamond =>
                 diamond.Type === stone.Type &&
                 diamond.Shape === stone.Shape &&
-                diamond.MmSize.trim() === stone.MmSize.trim()
+                normalizeMmSize(diamond.MmSize) === stoneSize
             );
 
             const Price = matchingDiamond ? matchingDiamond.Price ?? 0 : 0;
@@ -972,6 +975,7 @@ exports.calculatePricing = async (pricingDetails, clientId) => {
                 Price
             };
         });
+
     }
 
     // Calculate Diamonds Price
@@ -981,8 +985,8 @@ exports.calculatePricing = async (pricingDetails, clientId) => {
             if (ratePerCaratOfStone === undefined || ratePerCaratOfStone === null || ratePerCaratOfStone <= 0) {
                 diamondPriceNotFound = true;
             }
-            acc.diamondsPrice += parseFloat(stone.CtWeight.toFixed(3)) * ratePerCaratOfStone;
-            acc.diamondWeight += parseFloat(stone.CtWeight.toFixed(3));
+            acc.diamondsPrice += parseFloat(stone.CtWeight?.toFixed(3)) * ratePerCaratOfStone;
+            acc.diamondWeight += parseFloat(stone.CtWeight?.toFixed(3));
             return acc;
         },
         { diamondsPrice: 0, diamondWeight: 0 }
@@ -990,7 +994,7 @@ exports.calculatePricing = async (pricingDetails, clientId) => {
 
     // Calculate Metal Price
     const lossFactor = loss / 100;
-    metalPrice = parseFloat(metalWeight * ((metalRate * (1 + lossFactor)) + labour).toFixed(3));
+    metalPrice = parseFloat(metalWeight * ((metalRate * (1 + lossFactor)) + labour)?.toFixed(3));
 
     let undercutDiamondsPrice = 0;
     if (undercutPrice > 0) {
@@ -1006,13 +1010,13 @@ exports.calculatePricing = async (pricingDetails, clientId) => {
     const totalPrice = ((metalPrice + diamondsPrice) * quantity) + extraCharges + dutiesAmount;
 
     return {
-        MetalPrice: parseFloat(metalPrice.toFixed(3)),
-        DiamondsPrice: diamondPriceNotFound ? 0 : parseFloat(diamondsPrice.toFixed(3)),
-        TotalPrice: parseFloat(totalPrice.toFixed(3)),
+        MetalPrice: parseFloat(metalPrice?.toFixed(3)),
+        DiamondsPrice: diamondPriceNotFound ? 0 : parseFloat(diamondsPrice?.toFixed(3)),
+        TotalPrice: parseFloat(totalPrice?.toFixed(3)),
         Metal: {
             Weight: metalWeight,
             Quality: metalQuality,
-            Rate: parseFloat(metalFullRate).toFixed(3)
+            Rate: parseFloat(metalFullRate)?.toFixed(3)
         },
         DiamondWeight: parseFloat(diamondWeight?.toFixed(3)),
         TotalPieces: pricingDetails.TotalPieces,
@@ -1029,13 +1033,39 @@ exports.calculatePricing = async (pricingDetails, clientId) => {
             MmSize: stone.MmSize,
             SieveSize: stone.SieveSize,
             Weight: stone.Weight,
-            Price: parseFloat(stone.Price.toFixed(3)),
+            Price: parseFloat(stone.Price?.toFixed(3)),
             Pcs: stone.Pcs,
             CtWeight: stone.CtWeight
         }))
     };
 
 }
+
+function normalizeMmSize(value) {
+    if (!value) return "";
+
+    // Convert to lowercase and trim spaces
+    value = value.toLowerCase().trim();
+
+    // Remove all spaces
+    value = value.replace(/\s+/g, "");
+
+    // If it's a range "2x3"
+    if (value.includes("x")) {
+        const parts = value.split("x").map(v => normalizeNumber(v));
+        return parts.join("x"); // "2x3"
+    }
+
+    // If it's a single number "1.00"
+    return normalizeNumber(value);
+}
+
+// Normalize a single number
+function normalizeNumber(num) {
+    const n = parseFloat(num);
+    return isNaN(n) ? num : n.toString();  
+}
+
 
 exports.getPresignedUrl = async (key, action) => {
     return await generatePresignedUrl(key, action);

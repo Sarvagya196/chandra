@@ -32,7 +32,7 @@ exports.uploadMedia = async (req, res) => {
 
 
 /**
- * GET /api/chats/:chatId/messages
+ * GET /api/message/:chatId/messages
  */
 exports.getChatMessages = async (req, res) => {
   try {
@@ -52,7 +52,7 @@ exports.getChatMessages = async (req, res) => {
 };
 
 /**
- * POST /api/chats/:chatId/markRead
+ * POST /api/message/:chatId/markRead
  */
 exports.markChatAsRead = async (req, res) => {
   try {
