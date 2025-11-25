@@ -18,22 +18,3 @@ exports.getUserChats = async (req, res) => {
   }
 };
 
-exports.getChatsByEnquiryId = async (req, res) => {
-  try {
-    const { enquiryId } = req.params;
-    const user = req.user;
-    console.log("Enquiry ID:", req.user);
-    if (!enquiryId) {
-      return res.status(400).json({ message: 'enquiryId is required' });
-    }
-
-    const chats = await chatService.getChatsByEnquiryId(enquiryId,user);
-    console.log("chats fetched",chats);
-    res.status(200).json(chats);
-  } catch (error) {
-    console.error(`Error fetching chats for enquiry ${req.params.enquiryId}:`, error);
-    res.status(error.statusCode || 500).json({
-      message: error.message || 'Failed to fetch chats for enquiry',
-    });
-  }
-};

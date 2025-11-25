@@ -8,7 +8,7 @@ const connectDB = require('./config/db');
 const routes = require('./routes');
 const initSocket = require('./utils/socket'); // 🧠 Import socket logic
 const pushService = require('./services/pushNotification.service');
-const { createRolesCodelist } = require('./utils/populateCodelists');
+const { createRolesCodelist } = require('./utils/populateCodelists'); 
 const apiLogger = require('./middleware/apiLogger');
 
 const app = express();
@@ -49,12 +49,6 @@ const startApp = async () => {
   await connectDB();
 
   // Clean up any invalid chat documents with null values
-  try {
-    const Chat = require('./models/chat.model');
-    await Chat.cleanupInvalidChats();
-  } catch (err) {
-    console.error('Error during chat cleanup on startup:', err);
-  }
 
   // Start WebSocket server
   initSocket(server);

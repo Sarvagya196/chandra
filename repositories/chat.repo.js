@@ -222,7 +222,7 @@ exports.deleteChatsByEnquiryId = async (enquiryId) => {
 /**
  * Find all chats by EnquiryId.
  */
-exports.findChatsByEnquiryId = async (enquiryId,user) => {
+exports.  findChatsByEnquiryId = async (enquiryId,user) => {
   return Chat.find({ EnquiryId: enquiryId,Participants:{$in:[user._id]}})
     .populate({
       path: 'LastMessage',
