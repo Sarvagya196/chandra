@@ -27,6 +27,8 @@ const ChatSchema = new mongoose.Schema({
   UpdatedAt: { type: Date, default: Date.now }
 }, { timestamps: true });
 
-ChatSchema.index({ EnquiryId: 1, Type: 1 }, { unique: true });
+// Create unique index with exact field names matching the schema
+// The name parameter ensures the index name matches the schema field names
+ChatSchema.index({ EnquiryId: 1, Type: 1 }, { unique: true, name: 'EnquiryId_1_Type_1' });
 
 module.exports = mongoose.model('Chat', ChatSchema);

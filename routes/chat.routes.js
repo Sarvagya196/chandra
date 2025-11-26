@@ -5,4 +5,5 @@ const authenticateToken = require('../middleware/authenticateToken');
 
 router.get('/', authenticateToken, controller.getUserChats);
 
+
 module.exports = router;

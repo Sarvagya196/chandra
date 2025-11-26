@@ -99,7 +99,6 @@ exports.createEnquiry = async (data, userId) => {
 
     return enquiry._id;
 };
-
 exports.deleteEnquiry = async (id) => {
     try {
         // 1️⃣ Delete the enquiry
@@ -181,7 +180,7 @@ exports.updateEnquiry = async (id, data, userId) => {
 
     // 2️⃣ Client changed
     if (enquiry.ClientId != data.ClientId) {
-        const adminRoleId = (await codelistsService.getCodelistByName("Roles"))
+        const adminRoleId = codelistsService.getCodelistByName("Roles")
             ?.find(role => role.Code === "AD")?.Id;
         const adminIds = await userService.getUsersByRole(adminRoleId);
         const newClientIds = await userService.getUsersByClient(data.ClientId);
@@ -876,7 +875,6 @@ async function handleExcelDataForCad(file) {
 }
 
 exports.searchEnquiries = async (queryParams) => {
-
     // --- 1. Prepare Pagination ---
     const page = parseInt(queryParams.page, 10) || 1;
     const limit = parseInt(queryParams.limit, 10) || 25;

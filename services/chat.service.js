@@ -13,6 +13,20 @@ const messageService = require('../services/message.service');
  */
 exports.createChat = async (EnquiryId, EnquiryName, Type, Participants) => {
   try {
+    // Validate required fields
+    if (!EnquiryId) {
+      throw new Error('EnquiryId is required and cannot be null or undefined');
+    }
+    if (!Type) {
+      throw new Error('Type is required and cannot be null or undefined');
+    }
+    if (!EnquiryName) {
+      throw new Error('EnquiryName is required and cannot be null or undefined');
+    }
+    if (!Array.isArray(Participants)) {
+      throw new Error('Participants must be an array');
+    }
+
     // Check for existing chat
     const existingChat = await repo.findChatByEnquiryAndType(EnquiryId, Type);
     if (existingChat) {
@@ -31,6 +45,33 @@ exports.createChat = async (EnquiryId, EnquiryName, Type, Participants) => {
     console.log(`Created chat for Enquiry ${EnquiryId} (${Type})`);
     return chat;
   } catch (error) {
+    // Handle duplicate key error specifically
+    if (error.code === 11000 || error.name === 'MongoServerError') {
+      const errorMsg = error.message || '';
+      if (errorMsg.includes('duplicate key') && errorMsg.includes('null')) {
+        console.error(`❌ Duplicate key error with null values detected. This usually means there's an invalid chat document in the database.`);
+        console.error(`   Please run: db.chats.deleteMany({ $or: [{ EnquiryId: null }, { Type: null }] })`);
+        console.error(`   Or restart the server to auto-cleanup invalid chats.`);
+        
+        // Try to clean up and retry once
+        try {
+          const Chat = require('../models/chat.model');
+          await Chat.cleanupInvalidChats();
+          // Retry creating the chat
+          const retryChat = await repo.createChat({
+            EnquiryId,
+            EnquiryName,
+            Type,
+            Participants,
+          });
+          console.log(`✅ Successfully created chat after cleanup for Enquiry ${EnquiryId} (${Type})`);
+          return retryChat;
+        } catch (retryError) {
+          console.error(`❌ Retry failed after cleanup:`, retryError);
+          throw new Error(`Failed to create chat after cleanup. Please manually clean up invalid chat documents in the database.`);
+        }
+      }
+    }
     console.error(`Error creating chat for Enquiry ${EnquiryId} (${Type}):`, error);
     throw error;
   }
