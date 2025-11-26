@@ -23,6 +23,7 @@ const mongoose = require('mongoose');
     MetalPrice: { type: Number, default: 0 },
     DiamondsPrice: { type: Number, default: 0 },
     TotalPrice: { type: Number, default: 0 },
+    DutiesAmount: { type: Number, default: 0 },
     Loss: { type: Number, default: 0 },
     Labour: { type: Number, default: 0 },
     ExtraCharges: { type: Number, default: 0 },
