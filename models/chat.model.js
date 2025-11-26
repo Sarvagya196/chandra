@@ -31,7 +31,4 @@ const ChatSchema = new mongoose.Schema({
 // The name parameter ensures the index name matches the schema field names
 ChatSchema.index({ EnquiryId: 1, Type: 1 }, { unique: true, name: 'EnquiryId_1_Type_1' });
 
-const Chat = mongoose.model('Chat', ChatSchema);
-
-
-module.exports = Chat;
+module.exports = mongoose.model('Chat', ChatSchema);

@@ -180,7 +180,6 @@ exports.updateEnquiry = async (id, data, userId) => {
 
     // 2️⃣ Client changed
     if (enquiry.ClientId != data.ClientId) {
-        console.log("Client changed", enquiry.ClientId, data.ClientId);
         const adminRoleId = codelistsService.getCodelistByName("Roles")
             ?.find(role => role.Code === "AD")?.Id;
         const adminIds = await userService.getUsersByRole(adminRoleId);

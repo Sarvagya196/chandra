@@ -232,15 +232,3 @@ exports.updateLastMessage = async (chatId, messageId) => {
     console.error(`❌ Failed to update last message for chat ${chatId}:`, err);
   }
 };
-
-exports.getChatsByEnquiryId = async (enquiryId,user) => {
-  try {
-    if (!enquiryId) {
-      throw new Error('enquiryId is required');
-    }
-    return await repo.findChatsByEnquiryId(enquiryId,user);
-  } catch (error) {
-    console.error(`Error fetching chats for enquiry ${enquiryId}:`, error);
-    throw error;
-  }
-};

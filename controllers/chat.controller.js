@@ -17,4 +17,3 @@ exports.getUserChats = async (req, res) => {
     });
   }
 };
-
