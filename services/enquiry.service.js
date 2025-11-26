@@ -293,7 +293,7 @@ exports.updateAssetData = async (enquiryId, type, version, data, userId) => {
                     updatedCoral.IsApprovedVersion = data.IsApprovedVersion;
                     if (data.IsApprovedVersion === true) {
                         statusEntry = {
-                            Status: 'CAD',
+                            Status: 'Approved Cad',
                             Timestamp: new Date(),
                             AssignedTo: null,
                             AddedBy: userId || 'System',
@@ -303,11 +303,11 @@ exports.updateAssetData = async (enquiryId, type, version, data, userId) => {
                     else {
                         updatedCoral.ReasonForRejection = data.ReasonForRejection || "";
                         statusEntry = {
-                            Status: 'Coral',
+                            Status: 'Enquiry Created',
                             Timestamp: new Date(),
                             AssignedTo: enquiry.StatusHistory?.at(-1)?.AssignedTo,
                             AddedBy: userId || 'System',
-                            Details: "Coral Rejected - Redo - " + data.ReasonForRejection ?? ""
+                            Details: "Coral Rejected - " + data.ReasonForRejection ?? ""
                         };
                     }
                     enquiry.StatusHistory.push(statusEntry);
@@ -327,6 +327,14 @@ exports.updateAssetData = async (enquiryId, type, version, data, userId) => {
 
                 if (data.ShowToClient !== undefined && data.ShowToClient !== null) {
                     updatedCoral.ShowToClient = data.ShowToClient;
+                    statusEntry = {
+                        Status: 'Design Approval Pending',
+                        Timestamp: new Date(),
+                        AssignedTo: enquiry.StatusHistory?.at(-1)?.AssignedTo,
+                        AddedBy: userId || 'System',
+                        Details: "Approval pending for coral" ?? ""
+                    };
+                    enquiry.StatusHistory.push(statusEntry);
                 }
 
                 if (data.CoralCode !== undefined && data.CoralCode !== null) {
@@ -389,11 +397,11 @@ exports.updateAssetData = async (enquiryId, type, version, data, userId) => {
                     else {
                         updatedCad.ReasonForRejection = data.ReasonForRejection || "";
                         statusEntry = {
-                            Status: 'CAD',
+                            Status: 'Enquiry Created',
                             Timestamp: new Date(),
                             AssignedTo: enquiry.StatusHistory?.at(-1)?.AssignedTo,
                             AddedBy: userId || 'System',
-                            Details: "Cad Rejected - Redo" + data.ReasonForRejection ?? ""
+                            Details: "Cad Rejected - " + data.ReasonForRejection ?? ""
                         };
                     }
                     enquiry.StatusHistory.push(statusEntry);
@@ -417,6 +425,14 @@ exports.updateAssetData = async (enquiryId, type, version, data, userId) => {
 
                 if (data.ShowToClient !== undefined && data.ShowToClient !== null) {
                     updatedCad.ShowToClient = data.ShowToClient;
+                    statusEntry = {
+                        Status: 'Design Approval Pending',
+                        Timestamp: new Date(),
+                        AssignedTo: enquiry.StatusHistory?.at(-1)?.AssignedTo,
+                        AddedBy: userId || 'System',
+                        Details: "Approval pending for cad" ?? ""
+                    };
+                    enquiry.StatusHistory.push(statusEntry);
                 }
 
                 if (data.Description && data.Id) {
@@ -530,6 +546,7 @@ async function handleCoralUpload(enquiry, files, version, coralCode, userId) {
                 MetalPrice: parseFloat(pricing.MetalPrice),
                 DiamondsPrice: parseFloat(pricing.DiamondsPrice),
                 TotalPrice: parseFloat(pricing.TotalPrice),
+                DutiesAmount: parseFloat(pricing.DutiesAmount),
                 DiamondWeight: parseFloat(excelTableJson.DiamondWeight),
                 TotalPieces: excelTableJson.TotalPieces,
                 Loss: pricing.Client.Loss,
@@ -571,7 +588,7 @@ async function handleCoralUpload(enquiry, files, version, coralCode, userId) {
 
     // Add a status history entry for Coral upload
     const statusEntry = {
-        Status: 'Design Approval Pending',
+        Status: 'Quotation',
         Timestamp: new Date(),
         AddedBy: userId,
         Details: `Coral Version ${asset.Version} uploaded`
@@ -639,9 +656,10 @@ async function handleCadUpload(enquiry, files, version, cadCode, userId) {
             let pricing = await exports.calculatePricing(excelTableJson, enquiry.ClientId);
 
             let pricingEntry = [{
-                MetalPrice: pricing.MetalPrice,
-                DiamondsPrice: pricing.DiamondsPrice,
-                TotalPrice: pricing.TotalPrice,
+                MetalPrice: parseFloat(pricing.MetalPrice),
+                DiamondsPrice: parseFloat(pricing.DiamondsPrice),
+                TotalPrice: parseFloat(pricing.TotalPrice),
+                DutiesAmount: parseFloat(pricing.DutiesAmount),
                 DiamondWeight: parseFloat(excelTableJson.DiamondWeight),
                 TotalPieces: excelTableJson.TotalPieces,
                 Loss: pricing.Client.Loss,
@@ -681,7 +699,7 @@ async function handleCadUpload(enquiry, files, version, cadCode, userId) {
 
     // Add a status history entry for Cad upload
     const statusEntry = {
-        Status: 'Design Approval Pending',
+        Status: 'Quotation',
         Timestamp: new Date(),
         AddedBy: userId, // User ID from JWT token
         Details: `CAD Version ${asset.Version} uploaded`
@@ -1013,6 +1031,7 @@ exports.calculatePricing = async (pricingDetails, clientId) => {
         MetalPrice: parseFloat(metalPrice?.toFixed(3)),
         DiamondsPrice: diamondPriceNotFound ? 0 : parseFloat(diamondsPrice?.toFixed(3)),
         TotalPrice: parseFloat(totalPrice?.toFixed(3)),
+        DutiesAmount: parseFloat(dutiesAmount?.toFixed(3)),
         Metal: {
             Weight: metalWeight,
             Quality: metalQuality,
