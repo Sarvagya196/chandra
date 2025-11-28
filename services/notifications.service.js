@@ -2,6 +2,7 @@
 const repo = require('../repositories/notifications.repo');
 const pushService = require('../services/pushNotification.service');
 const userService = require('../services/user.service');
+const notificationChannels = require('../utils/notificationChannels');
 
 /**
  * Get all notifications for a specific user.
@@ -95,12 +96,16 @@ exports.createAlertsForUsers = async (userIds, title, body, type, link) => {
         link: link || '',
       };
 
+      const androidChannelId = notificationChannels.getChannelIdByType(type);
+      console.log("[NOTIFICATION] Using Android channel: ${androidChannelId} for type: ${type}");
+
       // Call your push service once with the combined token list
       await pushService.sendPushToTokens(
         allTokens,
         title,
         body,
-        pushData
+        pushData,
+        androidChannelId
       );
 
     } else {

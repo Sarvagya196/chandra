@@ -23,3 +23,7 @@ exports.savePushToken = async (userId, token) => {
 };
 
 exports.getTokensByIds = async (userIds) => await repo.getTokensByIds(userIds);
+
+exports.removePushTokensFromUsers = async (tokens) => {
+  return await repo.removePushTokensFromUsers(tokens);
+}

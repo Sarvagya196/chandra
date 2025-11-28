@@ -11,6 +11,7 @@ const pushService = require('./services/pushNotification.service');
 const { createRolesCodelist } = require('./utils/populateCodelists'); 
 const apiLogger = require('./middleware/apiLogger');
 const { createStatusCodelist } = require('./utils/populateCodelists');
+const { createStoneTypesCodelist } = require('./utils/populateCodelists');
 
 const app = express();
 const server = http.createServer(app);
@@ -60,6 +61,7 @@ const startApp = async () => {
     console.log(`🚀 Server running on port ${PORT}`);
     // createRolesCodelist(); populate roles codelist
     // createStatusCodelist(); populate status codelist
+    // createStoneTypesCodelist(); populate stone types codelist
   });
 };
 

@@ -42,3 +42,10 @@ exports.getTokensByIds = async (userIds) => {
 
   return users.flatMap((u) => u.pushTokens || []);
 };
+
+exports.removePushTokensFromUsers = async (tokens) => {
+  return User.updateMany(
+    { pushTokens: { $in: tokens } },
+    { $pull: { pushTokens: { $in: tokens } } }
+  );
+}
