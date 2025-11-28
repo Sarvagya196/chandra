@@ -4,6 +4,7 @@ const chatService = require('../services/chat.service');
 const messageService = require('../services/message.service');
 const pushService = require('../services/pushNotification.service');
 const userService = require('../services/user.service');
+const notificationChannels = require('../utils/notificationChannels');
 
 const frontendUrl =
     process.env.NODE_ENV === 'production'
@@ -171,11 +172,13 @@ function initSocket(server) {
                                         ? '🎥 Video received'
                                         : `📎 ${mediaName || 'File attached'}`;
 
+                        const messageChannelId = notificationChannels.getChannelIdByType('new_message');
                         // 4️⃣ Send push to all tokens
                         await pushService.sendPushToTokens(offlineTokens, title, body, {
                             chatId: chatId.toString(),
                             enquiryId: chat.EnquiryId.toString(),
                             type: 'new_message',
+                            messageChannelId
                         });
 
                         console.log(`📲 Sent FCM push to ${offlineTokens.length} offline devices`);
