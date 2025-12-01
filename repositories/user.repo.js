@@ -3,12 +3,12 @@ const mongoose = require('mongoose');
 
 // Get all users
 exports.getAllUsers = async () => {
-    return await User.find();
+  return await User.find();
 };
 
 // Get a single user by MongoDB _id
 exports.getUser = async (id) => {
-    return await User.findById(id); // Correct usage: pass `id` directly
+  return await User.findById(id);
 };
 
 exports.getUsersByRole = async (roleId) => {
@@ -36,7 +36,7 @@ exports.savePushToken = async (userId, token) => {
     throw new Error('Token is required');
   }
 
-  console.log("[PushToken] Saving token for user ${userId}", {
+  console.log(`[PushToken] Saving token for user ${userId}`, {
     tokenLength: token.length,
     tokenPreview: token.substring(0, 20) + '...',
   });
@@ -72,21 +72,6 @@ exports.savePushToken = async (userId, token) => {
  * @param {Array<ObjectId>} userIds
  * @returns {Array<String>} all valid push tokens
  */
-// exports.getTokensByIds = async (userIds) => {
-//   if (!userIds?.length) {
-//     console.log('[FCM] ⚠ No user IDs provided for token retrieval');
-//     return [];
-//   }
-
-//   const users = await User.find(
-//     { _id: { $in: userIds }, pushTokens: { $exists: true, $ne: [] } },
-//     { pushTokens: 1 }
-//   ).lean();
-
-//   return users.flatMap((u) => u.pushTokens || []);
-// };
-
-
 
 exports.getTokensByIds = async (userIds) => {
   if (!userIds?.length) {
@@ -102,7 +87,7 @@ exports.getTokensByIds = async (userIds) => {
     return id; // Already an ObjectId
   });
 
-  console.log("[FCM] Getting tokens for ${userIds.length} user(s):", userIds);
+  console.log(`[FCM] Getting tokens for ${userIds.length} user(s):`, userIds);
   console.log("[FCM] Normalized IDs:", normalizedIds.map(id => id.toString()));
 
   // Use less strict query - just check if user exists, not if tokens exist
@@ -149,9 +134,9 @@ exports.getTokensByIds = async (userIds) => {
   });
 
   if (allTokens.length === 0) {
-    console.warn("[FCM] ⚠ No FCM tokens found for any of the ${userIds.length} requested user(s)");
+    console.warn(`[FCM] ⚠ No FCM tokens found for any of the ${userIds.length} requested user(s)`);
     if (missingUserIds.length > 0) {
-      console.warn("[FCM] ⚠ ${missingUserIds.length} user(s) not found in database:", missingUserIds);
+      console.warn(`[FCM] ⚠ ${missingUserIds.length} user(s) not found in database:`, missingUserIds);
     }
   }
 

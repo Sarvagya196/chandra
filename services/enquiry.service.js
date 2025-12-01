@@ -67,14 +67,16 @@ exports.createEnquiry = async (data, userId) => {
 
     // 5️⃣ 🔔 Send notifications
     try {
+        // Build proper link format: /enquiries/{enquiryId} (as per FCM spec)
+        const enquiryLink = `/enquiries/${enquiry._id.toString()}`;
+
         // Admin notifications
         await notificationService.createAlertsForUsers(
             adminIds, // 1. The array of user IDs
             '🆕 New Enquiry Created', // 2. The title
             `New enquiry "${enquiry.Name}" has been created.`, // 3. The body
             'enquiry_created', // 4. The type
-            // `/enquiries/${enquiry._id.toString()}` // 5. The in-app link
-            `singleEnquiry` // 5. The in-app link TODO change to proper link
+            enquiryLink // 5. The in-app link (proper format: /enquiries/{id})
         );
 
         // Designer notification (if assigned)
@@ -84,8 +86,7 @@ exports.createEnquiry = async (data, userId) => {
                 '🎨 New Enquiry Assigned', // 2. The title
                 `You've been assigned enquiry "${enquiry.Name}".`, // 3. The body
                 'enquiry_assigned', // 4. The type
-                // `/enquiries/${enquiry._id.toString()}` // 5. The in-app link
-                `singleEnquiry` // 5. The in-app link TODO change to proper link
+                enquiryLink // 5. The in-app link (proper format: /enquiries/{id})
             );
         }
 
@@ -159,13 +160,13 @@ exports.updateEnquiry = async (id, data, userId) => {
 
             // 5️⃣ 🔔 Send notification to new assignee
             try {
+                const enquiryLink = `/enquiries/${enquiry._id.toString()}`;
                 await notificationService.createAlertsForUsers(
                     [newAssignee._id], // 1. The userId (as an array)
                     '🎨 New Enquiry Assigned', // 2. The title
                     `You've been assigned to enquiry "${enquiry.Name}".`, // 3. The body
                     'enquiry_assigned', // 4. The type
-                    // `/enquiries/${enquiry._id.toString()}` // 5. The in-app link
-                    `SingleEnquiry` // 5. The in-app link TODO modify
+                    enquiryLink // 5. The in-app link (proper format: /enquiries/{id})
                 );
 
             } catch (err) {
@@ -203,6 +204,84 @@ exports.updateEnquiry = async (id, data, userId) => {
         enquiry.StatusHistory.push(statusEntry);
         Object.assign(enquiry, updatedFields);
         await repo.updateEnquiry(id, enquiry);
+
+        // 3️⃣ 🔔 Send notifications for enquiry update
+        try {
+            console.log(`[ENQUIRY UPDATE] Starting notification process for enquiry ${id}...`);
+            console.log(`[ENQUIRY UPDATE] Changes detected: ${changes.length} change(s)`);
+
+            // Get users to notify: admins and assigned user (if any)
+            const adminRoleId = (await codelistsService.getCodelistByName("Roles"))
+                ?.find(role => role.Code === "AD")?.Id;
+            const adminIds = await userService.getUsersByRole(adminRoleId);
+            
+            // Build list of users to notify
+            const usersToNotify = [...adminIds];
+            
+            // Add assigned user if exists
+            const assignedTo = data.AssignedTo || enquiry.StatusHistory?.at(-1)?.AssignedTo;
+            if (assignedTo) {
+                // Convert to string if needed and avoid duplicates
+                const assignedToStr = assignedTo.toString();
+                if (!usersToNotify.some(id => id.toString() === assignedToStr)) {
+                    usersToNotify.push(assignedTo);
+                }
+            }
+
+            // Exclude the user who made the update (they don't need to be notified)
+            // EXCEPTION: If the user is assigned to the enquiry, they should still be notified
+            // (useful for testing and when assigned users update their own enquiries)
+            const updatingUserIdStr = userId ? userId.toString() : '';
+            const assignedToStr = assignedTo ? assignedTo.toString() : '';
+            const isUpdatingUserAssigned = updatingUserIdStr === assignedToStr;
+            
+            const usersToNotifyFiltered = usersToNotify.filter(
+                notifyUserId => {
+                    const notifyUserIdStr = notifyUserId.toString();
+                    // Don't exclude if user is assigned to the enquiry (they should know about updates)
+                    if (notifyUserIdStr === updatingUserIdStr && isUpdatingUserAssigned) {
+                        return true; // Include assigned user even if they made the update
+                    }
+                    return notifyUserIdStr !== updatingUserIdStr; // Otherwise exclude the updating user
+                }
+            );
+
+            console.log(`[ENQUIRY UPDATE] Users to notify: ${usersToNotifyFiltered.length} user(s)`);
+            console.log(`[ENQUIRY UPDATE] User IDs:, usersToNotifyFiltered.map(id => id.toString())`);
+            console.log(`[ENQUIRY UPDATE] User who made update: ${updatingUserIdStr || '(none)'}`);
+            console.log(`[ENQUIRY UPDATE] Assigned user: ${assignedTo ? assignedTo.toString() : '(none)'}`);
+            console.log(`[ENQUIRY UPDATE] Admin count: ${adminIds.length}`);
+
+            if (usersToNotifyFiltered.length > 0) {
+                // Build notification message based on what changed
+                let notificationTitle = '🔄 Enquiry Updated';
+                let notificationBody = `Enquiry "${enquiry.Name}" has been updated.`;
+
+                // If status changed, make it more specific
+                if (oldStatusHistory.Status !== data.Status) {
+                    notificationTitle = `📊 Status Changed`;
+                    notificationBody = `Enquiry "${enquiry.Name}" status changed to "${data.Status}".`;
+                }
+
+                // Build proper link format
+                const enquiryLink = `/enquiries/${enquiry._id.toString()}`;
+
+                await notificationService.createAlertsForUsers(
+                    usersToNotifyFiltered,
+                    notificationTitle,
+                    notificationBody,
+                    'enquiry_updated',
+                    enquiryLink
+                );
+
+                console.log(`[ENQUIRY UPDATE] ✅ Notifications sent successfully to ${usersToNotifyFiltered.length} user(s)`);
+            } else {
+                console.log(`[ENQUIRY UPDATE] ⚠ No users to notify (all users excluded or none found)`);
+            }
+        } catch (err) {
+            console.error(`[ENQUIRY UPDATE] ❌ Error sending notifications for enquiry ${id}:`, err);
+            // Don't fail the update if notification fails
+        }
     }
 
     return { _id: enquiry._id };
@@ -246,8 +325,8 @@ exports.handleAssetUpload = async (id, type, files, version, code, userId) => {
                 if (adminIdsToNotify.length > 0) {
                     // 2. Prepare the notification content
                     const fileCount = Array.isArray(files) ? files.length : 1;
-                    const prettyType = type.charAt(0)?.toUpperCase() + type.slice(1);
-                    const title = `New ${prettyType} uploaded`;
+                    const prettyType = type.charAt(0)?.toUpperCase() + type.slice(1         );
+                    const title = `New ${prettyType} uploaded`            ;
                     const body = `${fileCount} file${fileCount > 1 ? 's' : ''
                         } uploaded for enquiry "${enquiry.Name || enquiry._id}"${version ? ` (version ${version})` : ''
                         }.`;
@@ -262,11 +341,11 @@ exports.handleAssetUpload = async (id, type, files, version, code, userId) => {
                         link
                     );
                 } else {
-                    console.log('⚠️ No admins to notify after excluding uploader.');
+                    console.log('⚠ No admins to notify after excluding uploader.');
                 }
             }
         } else {
-            console.log('⚠️ Admin role id not found, skipping admin notifications.');
+            console.log('⚠ Admin role id not found, skipping admin notifications.');
         }
     } catch (err) {
         console.error(`❌ Error notifying admins after asset upload for enquiry ${id}:`, err);

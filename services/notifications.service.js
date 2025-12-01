@@ -67,6 +67,12 @@ exports.markAllAsRead = async (userId) => {
  * @param {string} [link] - Optional in-app link
  */
 exports.createAlertsForUsers = async (userIds, title, body, type, link) => {
+  console.log(`[NOTIFICATION] Creating alerts for ${userIds.length} user(s)`);
+  console.log(`[NOTIFICATION] Title: ${title}`);
+  console.log(`[NOTIFICATION] Body: ${body}`);
+  console.log(`[NOTIFICATION] Type: ${type}`);
+  console.log(`[NOTIFICATION] Link: ${link || '(none)'}`);
+
   // 1. Prepare notification documents for all users
   const notificationsToCreate = userIds.map(userId => ({
     User: userId,
@@ -82,37 +88,66 @@ exports.createAlertsForUsers = async (userIds, title, body, type, link) => {
   const createdNotifications = await repo.insertMany(
     notificationsToCreate
   );
+  console.log(`[NOTIFICATION] ✅ Saved ${createdNotifications.length} notification(s) to database`);
 
   // 3. --- THEN SEND PUSH ---
   try {
     // Get all tokens for all users (using your existing service)
-    const allTokens = userService.getTokensByIds(userIds);
+    console.log(`[NOTIFICATION] Getting FCM tokens for ${userIds.length} user(s)...`);
+    const allTokens = await userService.getTokensByIds(userIds);
 
     if (allTokens && allTokens.length > 0) {
+      console.log(`[NOTIFICATION] Found ${allTokens.length} FCM token(s)`);
       
-      // The push data is now generic for this batch
+      // Extract enquiryId from link if it's an enquiry-related link
+      let enquiryId = '';
+      if (link) {
+        const enquiryMatch = link.match(/\/enquiries\/([a-fA-F0-9]{24})/);
+        if (enquiryMatch) {
+          enquiryId = enquiryMatch[1];
+        }
+      }
+
+      // Build push data payload according to FCM specification
       const pushData = {
-        type: type,
+        type: type || '',
         link: link || '',
       };
 
-      const androidChannelId = notificationChannels.getChannelIdByType(type);
-      console.log("[NOTIFICATION] Using Android channel: ${androidChannelId} for type: ${type}");
+      // Add enquiryId if we extracted it
+      if (enquiryId) {
+        pushData.enquiryId = enquiryId;
+      }
+
+      // Use "default" channel ID as per FCM specification
+      const androidChannelId = 'default';
+      console.log(`[NOTIFICATION] Using Android channel: ${androidChannelId} for type: ${type}`);
 
       // Call your push service once with the combined token list
-      await pushService.sendPushToTokens(
+      console.log(`[NOTIFICATION] Sending push notification to ${allTokens.length} token(s)...`);
+      const pushResult = await pushService.sendPushToTokens(
         allTokens,
         title,
         body,
         pushData,
         androidChannelId
       );
+      
+      if (pushResult?.error) {
+        console.error(`[NOTIFICATION] ❌ Push notification failed:, pushResult.error`);
+        console.error(`[NOTIFICATION] Error code:, pushResult.errorCode`);
+      } else if (pushResult) {
+        console.log(`[NOTIFICATION] ✅ Push notification sent: ${pushResult.successCount || 0} success, ${pushResult.failureCount || 0} failed`);
+      } else {
+        console.log(`[NOTIFICATION] ✅ Push notification sent successfully`);
+      }
 
     } else {
-      console.log(`⚠️ No FCM tokens found for users, push not sent.`);
+      console.log(`[NOTIFICATION] ⚠ No FCM tokens found for users, push not sent.`);
     }
   } catch (error) {
-    console.error(`❌ Failed to send push for bulk alerts`, error);
+    console.error(`[NOTIFICATION] ❌ Failed to send push for bulk alerts:`, error);
+    throw error; // Re-throw to allow caller to handle
   }
 
   return createdNotifications;
