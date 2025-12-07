@@ -330,7 +330,7 @@ exports.handleAssetUpload = async (id, type, files, version, code, userId) => {
                     const body = `${fileCount} file${fileCount > 1 ? 's' : ''
                         } uploaded for enquiry "${enquiry.Name || enquiry._id}"${version ? ` (version ${version})` : ''
                         }.`;
-                    const link = `/enquiries/${enquiry._id.toString()}`; //TODO change
+                    const link = `/enquiries/${enquiry._id.toString()}`; 
 
                     // 3. Call the new service (replaces the entire old block)
                     await notificationService.createAlertsForUsers(
@@ -1010,26 +1010,26 @@ exports.getAggregatedCounts = async (queryParams) => {
 };
 
 exports.calculatePricing = async (pricingDetails, clientId) => {
-    //TODO which metal is it-> take that as parameter
     let loss, labour, extraCharges, duties, metalRate, metalFullRate, stones, metalWeight, metalQuality, metalPrice, quantity, undercutPrice;
     undercutPrice = pricingDetails.UndercutPrice;
     stones = pricingDetails.Stones;
     metalWeight = parseFloat(pricingDetails.Metal.Weight);
     metalQuality = pricingDetails.Metal.Quality;
+    metalRateOverride = pricingDetails.Metal.Rate;
     quantity = pricingDetails.Quantity || 1;
     let diamondPriceNotFound = false;
 
     const todaysMetalRates = await metalPricesService.getLatest();
 
-    // Determine metal rate
+    // Determine metal rate, if override is passed then consider that, otherwise stored rate
     if (pricingDetails.Metal.Quality === "Silver 925") {
-        metalRate = todaysMetalRates.silver?.price ?? 0;
-        metalFullRate = todaysMetalRates.silver?.price ?? 0;
+        metalRate = metalRateOverride ?? todaysMetalRates.silver?.price ?? 0;
+        metalFullRate = metalRateOverride ?? todaysMetalRates.silver?.price ?? 0;
     } else if (pricingDetails.Metal.Quality === "Platinum") {
-        metalRate = todaysMetalRates.platinum?.price ?? 0;
-        metalFullRate = todaysMetalRates.platinum?.price ?? 0;
+        metalRate = metalRateOverride ?? todaysMetalRates.platinum?.price ?? 0;
+        metalFullRate = metalRateOverride ?? todaysMetalRates.platinum?.price ?? 0;
     } else {
-        const goldRate = todaysMetalRates.gold?.price ?? 0;
+        const goldRate = metalRateOverride ?? todaysMetalRates.gold?.price ?? 0;
         metalFullRate = goldRate;
         const quality = pricingDetails.Metal.Quality?.toUpperCase();
         const match = quality?.match(/^(\d{1,2})K$/);
@@ -1113,7 +1113,7 @@ exports.calculatePricing = async (pricingDetails, clientId) => {
         Metal: {
             Weight: metalWeight,
             Quality: metalQuality,
-            Rate: parseFloat(metalFullRate)?.toFixed(3)
+            Rate: parseFloat(metalRateOverride ?? metalFullRate)?.toFixed(3)
         },
         DiamondWeight: parseFloat(diamondWeight?.toFixed(3)),
         TotalPieces: pricingDetails.TotalPieces,

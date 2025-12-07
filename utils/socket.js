@@ -176,7 +176,9 @@ function initSocket(server) {
                         // 4️⃣ Send push to all tokens
                         await pushService.sendPushToTokens(offlineTokens, title, body, {
                             chatId: chatId.toString(),
-                            enquiryId: chat.EnquiryId.toString(),
+                            enquiryId: chat.EnquiryId?.toString(),
+                            chatType: chat.Type,
+                            link: `/chats/${chatId.toString()}`,
                             type: 'new_message',
                             messageChannelId
                         });
