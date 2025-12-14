@@ -8,10 +8,9 @@ const notificationChannels = require('../utils/notificationChannels');
  * Get all notifications for a specific user.
  * (Uses repo.find)
  */
-exports.getUserNotifications = async (userId) => {
+exports.getUserNotifications = async (userId, limit = 50) => {
   const query = { User: userId };
-  // Using default sort and limit from repo
-  return repo.find(query);
+  return repo.find(query, { createdAt: -1 }, limit);
 };
 
 /**

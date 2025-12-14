@@ -5,14 +5,22 @@ const notificationService = require('../services/notifications.service');
  * GET /api/notifications
  * Get all notifications for the logged-in user.
  */
+
 exports.getAll = async (req, res) => {
   try {
-    const notifications = await notificationService.getUserNotifications(
-      req.user._id // Assumes authMiddleware provides req.user.id
+    const limit = Math.min(
+      parseInt(req.query.limit, 10) || 50,
+      100 // hard cap for safety
     );
+
+    const notifications = await notificationService.getUserNotifications(
+      req.user._id,
+      limit
+    );
+
     res.status(200).json(notifications);
   } catch (error) {
-    res.status(500).json({ error: 'Server error' });
+    res.status(500).json({ error: 'Server error:', error});
   }
 };
 
