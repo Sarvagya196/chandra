@@ -923,8 +923,10 @@ async function handleExcelDataForCad(file) {
         }
 
         // Extract diamondWeight if present (optional)
-        if (!diamondWeight && row['T.DIA WT']) {
-            diamondWeight = row['T.DIA WT'].toString()?.trim();
+        if ((diamondWeight == null || diamondWeight === '') && row['T.DIA WT'] != null) {
+            const raw = row['T.DIA WT'].toString().trim();
+            const parsed = parseFloat(raw);
+            diamondWeight = Number.isFinite(parsed) ? parsed : null;
         }
 
 
