@@ -105,7 +105,8 @@ exports.getMessagesForChat = async (chatId, userId, before, limit = 20) => {
       })).filter(receipt => receipt.userId && receipt.readAt), // Filter out any invalid entries
 
       // only senderId, frontend already has user info cached
-      SenderId: msg.SenderId,
+      SenderId: msg.SenderId._id,
+      SenderName: msg.SenderId.name,
 
       // populated parent message
       ReplyTo: msg.ParentMessageId

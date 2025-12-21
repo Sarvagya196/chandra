@@ -38,6 +38,10 @@ exports.getMessagesBefore = async (chatId, before, limit = 20) => {
         path: 'ParentMessageId',
         select: 'Message SenderId', // only fields needed for reply bubble
       })
+      .populate({
+        path: 'SenderId',
+        select: 'name _id',
+      })
       .lean();
   } catch (error) {
     throw new Error('Error fetching paginated messages: ' + error.message);

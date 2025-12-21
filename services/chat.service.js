@@ -148,8 +148,10 @@ exports.getChatsForUser = async (userId, page = 1, limit = 10, search = '') => {
           ? '📷 Photo'
           : lm.MessageType === 'video'
           ? '🎥 Video'
-          : '📎 Attachment'
+          : ''
         : '(no messages yet)';
+
+        console.log("lm=========>", lm);
 
       return {
         _id: chat._id,
@@ -160,6 +162,7 @@ exports.getChatsForUser = async (userId, page = 1, limit = 10, search = '') => {
           Text: messageText,
           Timestamp: lm?.Timestamp || chat.UpdatedAt,
           Sender: lm?.Sender?.Name || null,
+          SenderId: lm?.Sender?._id || null,
         },
         UnreadCount: unreadCount,
         UpdatedAt: chat.UpdatedAt,
