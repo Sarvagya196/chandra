@@ -125,17 +125,18 @@ exports.getChatsForUser = async (userId, page = 1, limit = 10, search = '') => {
   // Format chats for frontend
   const formatted = await Promise.all(
     data.map(async (chat) => {
-      // Get last read entry
-      const lastReadEntry = chat.LastRead?.find(
-        (r) => r.UserId?.toString() === userId.toString()
-      );
-      const lastReadAt = lastReadEntry?.LastReadAt || new Date(0);
-
-      // Compute unread message count TODO service calling model
+      // Compute unread message count based on ReadBy array
+      // Count messages where:
+      // 1. SenderId !== currentUserId (messages not sent by current user)
+      // 2. AND current user's ID is NOT in ReadBy array (message not read by current user)
       const unreadCount = await Message.countDocuments({
         ChatId: chat._id,
-        Timestamp: { $gt: lastReadAt },
         SenderId: { $ne: userId },
+        $or: [
+          { ReadBy: { $exists: false } },           // ReadBy field doesn't exist
+          { ReadBy: { $size: 0 } },                 // ReadBy array is empty
+          { 'ReadBy.userId': { $nin: [userId] } }   // Current user not in ReadBy array (using $nin = not in)
+        ]
       });
 
       // Prepare last message preview

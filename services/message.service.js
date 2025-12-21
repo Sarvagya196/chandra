@@ -45,12 +45,32 @@ exports.uploadMedia = async (file) => {
  */
 exports.getMessagesForChat = async (chatId, userId, before, limit = 20) => {
   // 1️⃣ Validate chat access
-  const chat = await chatService.getChatByChatId(chatId);
+  // Try to find chat by chatId first
+  let chat = await chatService.getChatByChatId(chatId);
+  
+  // If not found, try to find by enquiryId (frontend might be passing enquiryId)
+  if (!chat) {
+    const repo = require('../repositories/chat.repo');
+    const { ObjectId } = require('mongodb');
+    
+    // Try to find chat by enquiryId where user is a participant
+    if (ObjectId.isValid(chatId)) {
+      const chats = await repo.findChatsByEnquiryId(chatId);
+      // Find the chat where user is a participant
+      chat = chats.find(c => 
+        c.Participants.some(p => p.toString() === userId.toString())
+      );
+    }
+  }
+  
   if (!chat) {
     const err = new Error('Chat not found');
     err.statusCode = 404;
     throw err;
   }
+  
+  // Use the actual chat._id for message queries
+  const actualChatId = chat._id;
 
   const isParticipant = chat.Participants.some(
     (p) => p.toString() === userId.toString()
@@ -62,10 +82,10 @@ exports.getMessagesForChat = async (chatId, userId, before, limit = 20) => {
   }
 
   // 2️⃣ Fetch messages (with parent populated)
-  const messages = await repo.getMessagesBefore(chatId, before, limit);
+  const messages = await repo.getMessagesBefore(actualChatId, before, limit);
 
   if (!messages.length) {
-    return { ChatId: chatId, Data: [] };
+    return { ChatId: actualChatId, Data: [] };
   }
 
   // 3️⃣ Format messages for frontend
@@ -76,7 +96,13 @@ exports.getMessagesForChat = async (chatId, userId, before, limit = 20) => {
       MessageType: msg.MessageType,
       Timestamp: msg.Timestamp,
       IsRead:
-        msg.ReadBy?.some((id) => id.toString() === userId.toString()) || false,
+        msg.ReadBy?.some((receipt) => receipt.userId?.toString() === userId.toString()) || false,
+      // ✅ ReadBy: Array of objects with userId and readAt timestamp (for read receipts)
+      // Format: [{ userId: "user123", readAt: "2024-01-15T10:35:23.456Z" }]
+      ReadBy: (msg.ReadBy || []).map((receipt) => ({
+        userId: receipt.userId?.toString() || receipt.userId,
+        readAt: receipt.readAt // Date object will be serialized to ISO 8601 string in JSON response
+      })).filter(receipt => receipt.userId && receipt.readAt), // Filter out any invalid entries
 
       // only senderId, frontend already has user info cached
       SenderId: msg.SenderId,
@@ -102,7 +128,7 @@ exports.getMessagesForChat = async (chatId, userId, before, limit = 20) => {
     .reverse(); // oldest → newest for UI
 
   return {
-    ChatId: chatId,
+    ChatId: actualChatId,
     Limit: limit,
     Data: formatted,
     NextCursor:

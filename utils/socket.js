@@ -1,15 +1,38 @@
 // socket.js
 const { Server } = require('socket.io');
+const jwt = require('jsonwebtoken');
 const chatService = require('../services/chat.service');
 const messageService = require('../services/message.service');
 const pushService = require('../services/pushNotification.service');
 const userService = require('../services/user.service');
 const notificationChannels = require('../utils/notificationChannels');
+const Message = require('../models/message.model');
 
 const frontendUrl =
     process.env.NODE_ENV === 'production'
         ? 'https://workflow-ui-virid.vercel.app'
         : 'http://localhost:4200';
+
+/**
+ * Calculate unread count for a specific chat and user
+ */
+async function getUnreadCount(chatId, userId) {
+    try {
+        const unreadCount = await Message.countDocuments({
+            ChatId: chatId,
+            SenderId: { $ne: userId },
+            $or: [
+                { ReadBy: { $exists: false } },
+                { ReadBy: { $size: 0 } },
+                { 'ReadBy.userId': { $nin: [userId] } }
+            ]
+        });
+        return unreadCount;
+    } catch (error) {
+        console.error(`Error calculating unread count for chat ${chatId}:`, error);
+        return 0;
+    }
+}
 
 function initSocket(server) {
     const io = new Server(server, {
@@ -23,8 +46,33 @@ function initSocket(server) {
         }
     });
 
+    // 🔐 JWT Authentication Middleware for Socket.io
+    io.use((socket, next) => {
+        const token = socket.handshake.auth.token || socket.handshake.headers.authorization?.split(' ')[1];
+        
+        if (!token) {
+            console.warn('⚠️ Socket connection rejected: No token provided');
+            return next(new Error('Authentication error: No token provided'));
+        }
+
+        try {
+            const decoded = jwt.verify(token, process.env.JWT_SECRET);
+            socket.userId = decoded.Id; // Store userId in socket for later use
+            socket.data.userId = decoded.Id; // Also store in socket.data for consistency
+            next();
+        } catch (error) {
+            console.warn('⚠️ Socket connection rejected: Invalid token', error.message);
+            return next(new Error('Authentication error: Invalid or expired token'));
+        }
+    });
+
     io.on('connection', (socket) => {
-        console.log('🔌 New client connected:', socket.id);
+        const userId = socket.userId;
+        console.log(`🔌 New client connected: ${socket.id} (User: ${userId})`);
+
+        // 🟢 Auto-join user to their personal room for global events
+        socket.join(`user:${userId}`);
+        console.log(`🟢 User ${userId} auto-joined personal room: user:${userId}`);
 
         /**
          * Join a specific chat room.
@@ -110,39 +158,102 @@ function initSocket(server) {
                 console.log(`💬 Message sent in chat ${chatId} by ${userId}`);
                 await chatService.updateLastMessage(chatId, savedMessage._id);
 
-                // 2️⃣ Emit to all users in the chat room (real-time)
-                io.to(`chat_${chatId}`).emit('newMessage', savedMessage);
+                // 2️⃣ Fetch chat to get EnquiryId and Participants
+                let chat = await chatService.getChatByChatId(chatId);
+                
+                // If not found, try to find by enquiryId (fallback)
+                if (!chat) {
+                    const repo = require('../repositories/chat.repo');
+                    const { ObjectId } = require('mongodb');
+                    
+                    if (ObjectId.isValid(chatId)) {
+                        const chats = await repo.findChatsByEnquiryId(chatId);
+                        // Find the chat where user is a participant
+                        chat = chats.find(c => 
+                            c.Participants.some(p => p.toString() === userId.toString())
+                        );
+                    }
+                }
+                
+                if (!chat) {
+                    console.warn(`Chat ${chatId} not found`);
+                    socket.emit('error', { message: 'Chat not found' });
+                    return;
+                }
+
+                // 3️⃣ Format message data with required fields for frontend
+                const messageData = {
+                    _id: savedMessage._id.toString(),
+                    id: savedMessage._id.toString(),
+                    ChatId: chatId.toString(),
+                    EnquiryId: chat.EnquiryId?.toString() || null, // REQUIRED for frontend
+                    SenderId: userId.toString(),
+                    Message: savedMessage.Message || '',
+                    MessageType: savedMessage.MessageType || 'text',
+                    Timestamp: savedMessage.Timestamp || savedMessage.createdAt,
+                    CreatedAt: savedMessage.createdAt || savedMessage.Timestamp,
+                    ParentMessageId: savedMessage.ParentMessageId?.toString() || null,
+                    // Media fields if present
+                    ...(savedMessage.MediaUrl && {
+                        Media: {
+                            Url: savedMessage.MediaUrl,
+                            Name: savedMessage.MediaName,
+                            Key: savedMessage.MediaKey,
+                            Size: savedMessage.MediaSize
+                        }
+                    })
+                };
+
+                // 4️⃣ Emit to all users in the chat room (for real-time chat view)
+                io.to(`chat_${chatId}`).emit('newMessage', messageData);
+
+                // 5️⃣ 🆕 Emit to ALL chat participants via their personal rooms (for chat list updates)
+                // This ensures users on the chat list screen receive the event even if they haven't joined the chat room
+                const participants = chat.Participants || [];
+                participants.forEach((participantId) => {
+                    const participantIdStr = participantId.toString();
+                    // Emit to each participant's personal room
+                    io.to(`user:${participantIdStr}`).emit('newMessage', messageData);
+                });
+                
+                console.log(`📤 Emitted newMessage to ${participants.length} participants via personal rooms`);
 
                 // 3️⃣ Identify currently active users in this chat
                 const connectedSockets = await io.in(`chat_${chatId}`).fetchSockets();
                 const activeUserIds = connectedSockets.map((s) => s.data.userId);
                 const readers = activeUserIds.filter((id) => id !== userId);
 
-                // 4️⃣ Mark message as read for all active users (except sender)
+                // 6️⃣ Mark message as read for all active users (except sender)
                 if (readers.length > 0) {
                     await chatService.markChatAsRead(chatId, readers);
                     await messageService.markMessagesAsRead(chatId, readers);
 
-                    // 5️⃣ Notify everyone (sender + other clients) that messages were read
+                    // Calculate unread counts for each reader and emit to their personal rooms
+                    const unreadCountPromises = readers.map(async (readerId) => {
+                        const unreadCount = await getUnreadCount(chatId, readerId);
+                        // Emit to personal room for chat list updates
+                        io.to(`user:${readerId}`).emit('messagesRead', {
+                            chatId: chatId.toString(),
+                            userId: readerId.toString(),
+                            unreadCount: unreadCount
+                        });
+                        return { userId: readerId, unreadCount };
+                    });
+                    await Promise.all(unreadCountPromises);
+
+                    // Also notify everyone in the chat room (for read receipts/ticks)
                     io.to(`chat_${chatId}`).emit('messagesRead', {
-                        chatId,
-                        userIds: readers,
+                        chatId: chatId.toString(),
+                        userIds: readers.map(id => id.toString())
                     });
 
                     console.log(`👀 Active readers in chat ${chatId}:`, readers);
                 }
 
-                // 6️⃣ Fetch chat participants for offline notifications
-                const chat = await chatService.getChatByChatId(chatId);
-                if (!chat) {
-                    console.warn(`Chat ${chatId} not found`);
-                    return;
-                }
-
-                // Recipients = all except sender
-                const recipients = chat.Participants?.filter(
+                // 6️⃣ Recipients = all except sender (for offline notifications)
+                const recipients = participants.filter(
                     (p) => p.toString() !== userId.toString()
-                ) || [];
+                );
 
                 // Determine offline users = participants not in active socket list
                 const offlineUserIds = recipients.filter(
@@ -178,7 +289,7 @@ function initSocket(server) {
                             chatId: chatId.toString(),
                             enquiryId: chat.EnquiryId?.toString(),
                             chatType: chat.Type,
-                            link: `/chats/${chatId.toString()}`,
+                            link: `chats/${chatId.toString()}`, // Mobile app format (no leading slash)
                             type: 'new_message',
                             messageChannelId
                         });
@@ -197,6 +308,49 @@ function initSocket(server) {
 
 
         /**
+         * 🆕 Handle marking messages as read (for chat list unread count updates)
+         */
+        socket.on('markMessagesRead', async (data) => {
+            const { chatId, messageIds } = data;
+            const userId = socket.userId;
+
+            try {
+                if (!chatId) {
+                    socket.emit('error', { message: 'chatId is required' });
+                    return;
+                }
+
+                // 1️⃣ Mark messages as read in database
+                await chatService.markChatAsRead(chatId, [userId]);
+                await messageService.markMessagesAsRead(chatId, [userId]);
+
+                // 2️⃣ Recalculate unread count for this user
+                const unreadCount = await getUnreadCount(chatId, userId);
+
+                // 3️⃣ Emit messagesRead event to user's personal room
+                io.to(`user:${userId}`).emit('messagesRead', {
+                    chatId: chatId.toString(),
+                    userId: userId.toString(),
+                    unreadCount: unreadCount,
+                    messageIds: messageIds || []
+                });
+
+                console.log(`✅ User ${userId} marked messages as read in chat ${chatId}. Unread count: ${unreadCount}`);
+
+                // 4️⃣ Also notify others in the chat room (for read receipts/ticks)
+                io.to(`chat_${chatId}`).emit('messagesRead', {
+                    chatId: chatId.toString(),
+                    userIds: [userId.toString()],
+                    unreadCount: unreadCount
+                });
+
+            } catch (err) {
+                console.error('❌ Error marking messages as read:', err);
+                socket.emit('error', { message: 'Failed to mark messages as read' });
+            }
+        });
+
+        /**
          * TODO Typing indicators
          */
         socket.on('typing', ({ chatId, userId, isTyping }) => {
@@ -207,8 +361,9 @@ function initSocket(server) {
          * Handle disconnection
          */
         socket.on('disconnect', () => {
+            const userId = socket.userId;
             socket.leaveAll();
-            console.log('⚡ Client disconnected:', socket.id);
+            console.log(`⚡ Client disconnected: ${socket.id} (User: ${userId})`);
         });
     });
 

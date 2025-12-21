@@ -76,10 +76,20 @@ const enquirySchema = new mongoose.Schema({
         Key: String,
         Description: String
     }],
+    ReferenceVideos: [{
+        Id: String,
+        Key: String,
+        Description: String
+    }],
     Coral: [{
         Version: String,
         CoralCode: String,
         Images: [{
+            Id: String,
+            Key: String,
+            Description: String
+        }],
+        Videos: [{
             Id: String,
             Key: String,
             Description: String
@@ -101,6 +111,11 @@ const enquirySchema = new mongoose.Schema({
         Version: String,
         CadCode: String,
         Images: [{
+            Id: String,
+            Key: String,
+            Description: String
+        }],
+        Videos: [{
             Id: String,
             Key: String,
             Description: String
