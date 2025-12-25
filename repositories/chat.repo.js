@@ -113,7 +113,7 @@ exports.getChatsForUserAgg = async (userId, page = 1, limit = 10, search = '') =
           Timestamp: '$LastMessageDoc.Timestamp',
           Sender: {
             _id: '$LastMessageSender._id',
-            Name: '$LastMessageSender.name'
+            Name: '$LastMessageSender.Name'
           }
         }
       }

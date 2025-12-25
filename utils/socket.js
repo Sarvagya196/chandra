@@ -353,36 +353,8 @@ function initSocket(server) {
         /**
          * TODO Typing indicators
          */
-        // socket.on('typing', ({ chatId, userId, isTyping }) => {
-        //     socket.to(`chat_${chatId}`).emit('userTyping', { userId, isTyping });
-        // });
-
-        socket.on('typing', async ({ chatId, userId, isTyping }) => {
-            try {
-                // Fetch user data
-                const user = await userService.getUserById(userId);
-                
-                // Emit with user data
-                socket.to(`chat_${chatId}`).emit('userTyping', { 
-                    chatId,
-                    userId, 
-                    isTyping,
-                    user: {
-                        _id: user._id,
-                        name: user.name,
-                        email: user.email,
-                        // Add any other fields you need
-                    }
-                });
-            } catch (err) {
-                console.error('Error fetching user data for typing indicator:', err);
-                // Fallback: emit without user data
-                socket.to(`chat_${chatId}`).emit('userTyping', { 
-                    chatId,
-                    userId, 
-                    isTyping 
-                });
-            }
+        socket.on('typing', ({ chatId, userId, isTyping }) => {
+            socket.to(`chat_${chatId}`).emit('userTyping', { userId, isTyping });
         });
 
         /**

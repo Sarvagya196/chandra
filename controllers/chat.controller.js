@@ -8,7 +8,7 @@ exports.getUserChats = async (req, res) => {
     const search = req.query.search || '';
 
     const result = await chatService.getChatsForUser(userId, page, limit, search);
-console.log("result=========>123", [{...result.Data[0].LastMessage}]);
+
     res.status(200).json(result);
   } catch (error) {
     console.error('Error fetching chats:', error);
