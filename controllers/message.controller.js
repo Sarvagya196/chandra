@@ -42,6 +42,7 @@ exports.getChatMessages = async (req, res) => {
     const limit = parseInt(req.query.limit) || 20;
 
     const result = await messageService.getMessagesForChat(chatId, userId, before, limit);
+ 
     res.status(200).json(result);
   } catch (error) {
     console.error('Error fetching chat messages:', error);

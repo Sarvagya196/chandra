@@ -119,25 +119,25 @@ exports.getChatsForUserAgg = async (userId, page = 1, limit = 10, search = '') =
       }
     },
 
-    // Sort + paginate
-    {
-      $facet: {
-        metadata: [{ $count: 'total' }],
-        data: [
-          { $sort: { UpdatedAt: -1 } },
-          { $skip: skip },
-          { $limit: limit }
-        ]
+      // Sort + paginate
+      {
+        $facet: {
+          metadata: [{ $count: 'total' }],
+          data: [
+            { $sort: { UpdatedAt: -1 } },
+            { $skip: skip },
+            { $limit: limit }
+          ]
+        }
+      },
+      { $unwind: { path: '$metadata', preserveNullAndEmptyArrays: true } },
+      {
+        $project: {
+          total: { $ifNull: ['$metadata.total', 0] },
+          data: 1
+        }
       }
-    },
-    { $unwind: { path: '$metadata', preserveNullAndEmptyArrays: true } },
-    {
-      $project: {
-        total: { $ifNull: ['$metadata.total', 0] },
-        data: 1
-      }
-    }
-  ];
+    ];
 
   const result = await Chat.aggregate(pipeline);
   const normalized = result?.[0] || { total: 0, data: [] };
@@ -222,7 +222,14 @@ exports.deleteChatsByEnquiryId = async (enquiryId) => {
 /**
  * Find all chats by EnquiryId.
  */
-exports.findChatsByEnquiryId = async (enquiryId) => {
-  return Chat.find({ EnquiryId: enquiryId }).lean();
+exports.findChatsByEnquiryId = async (enquiryId,user) => {
+  return Chat.find({ EnquiryId: enquiryId,Participants:{$in:[user._id]}})
+    .populate({
+      path: 'LastMessage',
+      populate: {
+        path: 'SenderId',
+      }
+    })
+    .lean();
 };
 

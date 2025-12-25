@@ -76,11 +76,6 @@ const enquirySchema = new mongoose.Schema({
         Key: String,
         Description: String
     }],
-    ReferenceVideos: [{
-        Id: String,
-        Key: String,
-        Description: String
-    }],
     Coral: [{
         Version: String,
         CoralCode: String,
@@ -89,11 +84,7 @@ const enquirySchema = new mongoose.Schema({
             Key: String,
             Description: String
         }],
-        Videos: [{
-            Id: String,
-            Key: String,
-            Description: String
-        }],
+ 
         Excel: {
             Id: String,
             Key: String,
@@ -115,11 +106,7 @@ const enquirySchema = new mongoose.Schema({
             Key: String,
             Description: String
         }],
-        Videos: [{
-            Id: String,
-            Key: String,
-            Description: String
-        }],
+
         Excel: {
             Id: String,
             Key: String,
