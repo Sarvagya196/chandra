@@ -161,7 +161,6 @@ exports.getAggregatedCounts = async (req, res) => {
 exports.searchEnquiries = async (req, res) => {
     try {
         // Pass all UI query params (e.g., ?search=...&status=...&page=1)
-        console.log(req.query);
         const results = await service.searchEnquiries(req.query); 
         res.json(results);
     } catch (error) {

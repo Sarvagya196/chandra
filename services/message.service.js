@@ -47,22 +47,6 @@ exports.getMessagesForChat = async (chatId, userId, before, limit = 20) => {
   // 1️⃣ Validate chat access
   // Try to find chat by chatId first
   let chat = await chatService.getChatByChatId(chatId);
-  
-  // If not found, try to find by enquiryId (frontend might be passing enquiryId)
-  if (!chat) {
-    const repo = require('../repositories/chat.repo');
-    const { ObjectId } = require('mongodb');
-    
-    // Try to find chat by enquiryId where user is a participant
-    if (ObjectId.isValid(chatId)) {
-      const chats = await repo.findChatsByEnquiryId(chatId);
-      // Find the chat where user is a participant
-      chat = chats.find(c => 
-        c.Participants.some(p => p.toString() === userId.toString())
-      );
-    }
-  }
-  
   if (!chat) {
     const err = new Error('Chat not found');
     err.statusCode = 404;

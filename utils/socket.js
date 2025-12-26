@@ -161,20 +161,6 @@ function initSocket(server) {
                 // 2️⃣ Fetch chat to get EnquiryId and Participants
                 let chat = await chatService.getChatByChatId(chatId);
                 
-                // If not found, try to find by enquiryId (fallback)
-                if (!chat) {
-                    const repo = require('../repositories/chat.repo');
-                    const { ObjectId } = require('mongodb');
-                    
-                    if (ObjectId.isValid(chatId)) {
-                        const chats = await repo.findChatsByEnquiryId(chatId);
-                        // Find the chat where user is a participant
-                        chat = chats.find(c => 
-                            c.Participants.some(p => p.toString() === userId.toString())
-                        );
-                    }
-                }
-                
                 if (!chat) {
                     console.warn(`Chat ${chatId} not found`);
                     socket.emit('error', { message: 'Chat not found' });
@@ -358,31 +344,7 @@ function initSocket(server) {
         // });
 
         socket.on('typing', async ({ chatId, userId, isTyping }) => {
-            try {
-                // Fetch user data
-                const user = await userService.getUserById(userId);
-                
-                // Emit with user data
-                socket.to(`chat_${chatId}`).emit('userTyping', { 
-                    chatId,
-                    userId, 
-                    isTyping,
-                    user: {
-                        _id: user._id,
-                        name: user.name,
-                        email: user.email,
-                        // Add any other fields you need
-                    }
-                });
-            } catch (err) {
-                console.error('Error fetching user data for typing indicator:', err);
-                // Fallback: emit without user data
-                socket.to(`chat_${chatId}`).emit('userTyping', { 
-                    chatId,
-                    userId, 
-                    isTyping 
-                });
-            }
+            socket.to(`chat_${chatId}`).emit('userTyping', { userId, isTyping,chatId });
         });
 
         /**
