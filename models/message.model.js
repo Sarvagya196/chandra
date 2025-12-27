@@ -41,8 +41,11 @@ const MessageSchema = new mongoose.Schema({
   MediaUrl: { type: String },
   MediaSize: { type: Number },
 
-  // 👀 Read receipts
-  ReadBy: [{ type: mongoose.Schema.Types.ObjectId, ref: 'User' }],
+  // 👀 Read receipts with timestamps
+  ReadBy: [{
+    userId: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true },
+    readAt: { type: Date, required: true, default: Date.now }
+  }],
 
   // ⏰ Timestamp
   Timestamp: { type: Date, default: Date.now }

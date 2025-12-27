@@ -67,8 +67,8 @@ exports.createEnquiry = async (data, userId) => {
 
     // 5️⃣ 🔔 Send notifications
     try {
-        // Build proper link format: /enquiries/{enquiryId} (as per FCM spec)
-        const enquiryLink = `/enquiries/${enquiry._id.toString()}`;
+        // Build proper link format: enquiries/{enquiryId} (mobile app format - no leading slash)
+        const enquiryLink = `enquiries/${enquiry._id.toString()}`;
 
         // Admin notifications
         await notificationService.createAlertsForUsers(
@@ -160,13 +160,13 @@ exports.updateEnquiry = async (id, data, userId) => {
 
             // 5️⃣ 🔔 Send notification to new assignee
             try {
-                const enquiryLink = `/enquiries/${enquiry._id.toString()}`;
+                const enquiryLink = `enquiries/${enquiry._id.toString()}`; // Mobile app format
                 await notificationService.createAlertsForUsers(
                     [newAssignee._id], // 1. The userId (as an array)
                     '🎨 New Enquiry Assigned', // 2. The title
                     `You've been assigned to enquiry "${enquiry.Name}".`, // 3. The body
                     'enquiry_assigned', // 4. The type
-                    enquiryLink // 5. The in-app link (proper format: /enquiries/{id})
+                    enquiryLink // 5. The in-app link (mobile app format: enquiries/{id})
                 );
 
             } catch (err) {
@@ -263,8 +263,8 @@ exports.updateEnquiry = async (id, data, userId) => {
                     notificationBody = `Enquiry "${enquiry.Name}" status changed to "${data.Status}".`;
                 }
 
-                // Build proper link format
-                const enquiryLink = `/enquiries/${enquiry._id.toString()}`;
+                // Build proper link format (mobile app format - no leading slash)
+                const enquiryLink = `enquiries/${enquiry._id.toString()}`;
 
                 await notificationService.createAlertsForUsers(
                     usersToNotifyFiltered,
@@ -304,6 +304,7 @@ exports.handleAssetUpload = async (id, type, files, version, code, userId) => {
         case 'reference':
             uploadResult = await handleReferenceImageUpload(enquiry, files, userId);
             break;
+  
         default:
             throw new Error('Invalid asset type');
     }
@@ -330,7 +331,7 @@ exports.handleAssetUpload = async (id, type, files, version, code, userId) => {
                     const body = `${fileCount} file${fileCount > 1 ? 's' : ''
                         } uploaded for enquiry "${enquiry.Name || enquiry._id}"${version ? ` (version ${version})` : ''
                         }.`;
-                    const link = `/enquiries/${enquiry._id.toString()}`; 
+                    const link = `enquiries/${enquiry._id.toString()}`; // Mobile app format
 
                     // 3. Call the new service (replaces the entire old block)
                     await notificationService.createAlertsForUsers(
@@ -586,6 +587,8 @@ async function handleCoralUpload(enquiry, files, version, coralCode, userId) {
         };
     }
 
+    
+
     if (files.images) {
         for (const file of files.images) {
             const key = await uploadToS3(file);
@@ -799,6 +802,7 @@ async function handleReferenceImageUpload(enquiry, files, userId) {
 
     enquiry.ReferenceImages = enquiry.ReferenceImages || [];
 
+
     if (files.images) {
         for (const file of files.images) {
             const key = await uploadToS3(file);
@@ -810,11 +814,12 @@ async function handleReferenceImageUpload(enquiry, files, userId) {
         }
     }
 
-    // Add a status history entry for Reference Image upload
+
+    
     const statusEntry = {
         Timestamp: new Date(),
         AddedBy: userId,
-        Details: 'Reference images uploaded'
+           Details: 'Reference images uploaded'
     };
 
     // Set 'AssignedTo' to the last status history's 'AssignedTo'

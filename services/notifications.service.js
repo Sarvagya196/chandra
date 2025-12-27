@@ -98,24 +98,52 @@ exports.createAlertsForUsers = async (userIds, title, body, type, link) => {
     if (allTokens && allTokens.length > 0) {
       console.log(`[NOTIFICATION] Found ${allTokens.length} FCM token(s)`);
       
-      // Extract enquiryId from link if it's an enquiry-related link
+      // Normalize link format (remove leading slash for mobile app compatibility)
+      let normalizedLink = link || '';
+      if (normalizedLink.startsWith('/')) {
+        normalizedLink = normalizedLink.substring(1);
+      }
+
+      // Extract IDs from link for data payload
       let enquiryId = '';
+      let chatId = '';
+      let clientId = '';
+      
       if (link) {
-        const enquiryMatch = link.match(/\/enquiries\/([a-fA-F0-9]{24})/);
+        // Extract enquiryId from various link formats
+        const enquiryMatch = link.match(/(?:^|\/)(?:enquiries|designs|pricing)\/([a-fA-F0-9]{24})/);
         if (enquiryMatch) {
           enquiryId = enquiryMatch[1];
+        }
+        
+        // Extract chatId
+        const chatMatch = link.match(/(?:^|\/)chats\/([a-fA-F0-9]{24})/);
+        if (chatMatch) {
+          chatId = chatMatch[1];
+        }
+        
+        // Extract clientId
+        const clientMatch = link.match(/(?:^|\/)clients\/([a-fA-F0-9]{24})/);
+        if (clientMatch) {
+          clientId = clientMatch[1];
         }
       }
 
       // Build push data payload according to FCM specification
       const pushData = {
         type: type || '',
-        link: link || '',
+        link: normalizedLink, // Use normalized link (without leading slash)
       };
 
-      // Add enquiryId if we extracted it
+      // Add IDs if extracted
       if (enquiryId) {
         pushData.enquiryId = enquiryId;
+      }
+      if (chatId) {
+        pushData.chatId = chatId;
+      }
+      if (clientId) {
+        pushData.clientId = clientId;
       }
 
       // Use "default" channel ID as per FCM specification
