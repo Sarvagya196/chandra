@@ -52,6 +52,11 @@ exports.deleteEnquiry = async (id) => {
   return await Enquiry.findByIdAndDelete(id);
 };
 
+// Bulk delete enquiries by array of ids
+exports.deleteMany = (ids) => {
+    return Enquiry.deleteMany({ _id: { $in: ids } });
+};
+
 exports.updateEnquiry = async (id, updatedEnquiry) => {
   // 1️⃣ Fetch existing document
   const existing = await Enquiry.findById(id).lean();
@@ -362,4 +367,39 @@ exports.aggregateBy = async (groupBy, filters = {}) => {
     pipeline.push({ $sort: { count: -1 } }); 
 
     return Enquiry.aggregate(pipeline);
+};
+
+// Bulk append status to multiple enquiries, copying AssignedTo from last entry
+exports.bulkAppendStatus = async (ids, { Status, AddedBy }) => {
+
+    // 1️⃣ Fetch last status entry for each enquiry
+    const enquiries = await Enquiry.find(
+        { _id: { $in: ids } },
+        { StatusHistory: { $slice: -1 } } // only fetch the last entry
+    ).lean();
+
+    // 2️⃣ Build bulk updates with copied AssignedTo
+    const updates = enquiries.map(enquiry => {
+        const last = enquiry?.StatusHistory?.[0] || {};
+        const assignedTo = last.AssignedTo || null;
+
+        return {
+            updateOne: {
+                filter: { _id: enquiry._id },
+                update: {
+                    $push: {
+                        StatusHistory: {
+                            Status,
+                            AssignedTo: assignedTo,
+                            AddedBy,
+                            Timestamp: new Date(),
+                            Details: `Mass status update → ${Status}`
+                        }
+                    }
+                }
+            }
+        };
+    });
+
+    return Enquiry.bulkWrite(updates);
 };

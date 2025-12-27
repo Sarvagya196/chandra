@@ -36,8 +36,13 @@ router.post(
     controller.uploadAssets // Third middleware: Processing the uploaded files
 );
 
-// GET enquiries by userId
-// router.get('/user/:userId', authenticateToken, controller.getEnquiriesByUserId)
+// Mass Actions
+router.post(
+    '/mass-action',
+    authenticateToken,  // First middleware: Authentication
+    controller.massActionEnquiries
+);
+
 
 //Update asset details, marking as approved, 
 router.put('/:id/upload/:type',

@@ -168,3 +168,31 @@ exports.searchEnquiries = async (req, res) => {
         res.status(500).json({ message: "Internal server error", error: error.message });
     }
 };
+
+exports.massActionEnquiries = async (req, res) => {
+    try {
+        const { enquiryIds, updateType, newStatus } = req.body;
+        const userId = req.user?._id || 'System';
+
+        const result = await service.massActionEnquiries({
+            enquiryIds,
+            updateType,
+            newStatus,
+            userId
+        });
+
+        res.json({
+            success: true,
+            message: "Mass action completed",
+            result
+        });
+
+    } catch (error) {
+        console.error("Error in mass action:", error);
+        res.status(500).json({
+            message: "Internal server error",
+            error: error.message
+        });
+    }
+};
+

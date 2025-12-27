@@ -100,6 +100,7 @@ exports.createEnquiry = async (data, userId) => {
 
     return enquiry._id;
 };
+
 exports.deleteEnquiry = async (id) => {
     try {
         // 1️⃣ Delete the enquiry
@@ -286,7 +287,6 @@ exports.updateEnquiry = async (id, data, userId) => {
 
     return { _id: enquiry._id };
 };
-
 
 exports.handleAssetUpload = async (id, type, files, version, code, userId) => {
     const enquiry = await repo.getEnquiryById(id);
@@ -1143,7 +1143,44 @@ exports.calculatePricing = async (pricingDetails, clientId) => {
         }))
     };
 
-}
+};
+
+exports.massActionEnquiries = async ({ enquiryIds, updateType, newStatus, userId }) => {
+
+    if (!enquiryIds?.length) {
+        throw new Error("enquiryIds is required");
+    }
+
+    switch (updateType) {
+
+        case "status":
+            if (!newStatus) {
+                throw new Error("newStatus is required when updateType = status");
+            }
+
+            return repo.bulkAppendStatus(enquiryIds, {
+                Status: newStatus,
+                AddedBy: userId
+            });
+
+        case "delete":
+            const results = [];
+
+            for (const id of enquiryIds) {
+                const result = await this.deleteEnquiry(id);
+                results.push({ id, result });
+            }
+
+            return {
+                deletedCount: results.length,
+                results
+            };
+
+        default:
+            throw new Error("Invalid updateType");
+    }
+};
+
 
 function normalizeMmSize(value) {
     if (!value) return "";

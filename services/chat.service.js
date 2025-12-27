@@ -208,7 +208,7 @@ exports.deleteChatsByEnquiryId = async (enquiryId) => {
       return { success: true, deletedChats: 0, deletedMessages: 0 };
     }
 
-    const chatIds = chats.map(c => c._id);
+    const chatIds = chats.map(c => c._id).filter(id => id != null);
 
     // 2️⃣ Delete all messages linked to these chatIds
     const messageResult = await messageService.deleteMessagesByChatIds(chatIds);
