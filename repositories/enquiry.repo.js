@@ -287,6 +287,14 @@ exports.search = async (searchTerm, filters, sort, pagination) => {
     return { data, total };
 };
 
+const AGGREGATE_CLIENT_STATUSES = [
+    "Enquiry Created",
+    "Coral",
+    "CAD",
+    "Approved Cad",
+    "Quotation",
+];
+
 
 /**
  * Aggregates enquiry counts by a dynamic field, with optional filters.
@@ -315,22 +323,22 @@ exports.aggregateBy = async (groupBy, filters = {}) => {
     let needsAssignedTo = !!filters.assignedTo || (groupBy === 'status' && filters.assignedTo);
 
     // We must compute fields *before* we can filter on them
-    if (groupBy === 'status' || needsAssignedTo) {
-        const fieldsToAdd = {};
-        
-        if (groupBy === 'status') {
-            fieldsToAdd.CurrentStatus = { $arrayElemAt: ["$StatusHistory.Status", -1] };
-        }
-        if (needsAssignedTo) {
-            fieldsToAdd.AssignedTo = { $arrayElemAt: ["$StatusHistory.AssignedTo", -1] };
-        }
-        
-        pipeline.push({ $addFields: fieldsToAdd });
+    const fieldsToAdd = {};    
+    fieldsToAdd.CurrentStatus = { $arrayElemAt: ["$StatusHistory.Status", -1] };
+    if (needsAssignedTo) {
+        fieldsToAdd.AssignedTo = { $arrayElemAt: ["$StatusHistory.AssignedTo", -1] };
     }
+    
+    pipeline.push({ $addFields: fieldsToAdd });
     
     // --- 3. Build Post-Match Stage (for computed fields) ---
     if (filters.assignedTo) {
         postMatchStage.AssignedTo = filters.assignedTo;
+    }
+
+    // When grouping by client → restrict to allowed statuses
+    if (groupBy === "client") {
+        postMatchStage.CurrentStatus = { $in: AGGREGATE_CLIENT_STATUSES };
     }
 
     if (Object.keys(postMatchStage).length > 0) {

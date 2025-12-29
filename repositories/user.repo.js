@@ -21,13 +21,6 @@ exports.getUsersByClient = async (clientId) => {
   return users.map(u => u._id);
 };
 
-// exports.savePushToken = async (userId, token) => {
-//   return User.updateOne(
-//     { _id: userId },
-//     { $addToSet: { pushTokens: token } } // store multiple devices per user
-//   );
-// };
-
 exports.savePushToken = async (userId, token) => {
   if (!userId) {
     throw new Error('User ID is required');
