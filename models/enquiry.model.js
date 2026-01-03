@@ -10,6 +10,7 @@ const mongoose = require('mongoose');
     Pcs: Number,
     CtWeight: Number,
     Price: Number,
+    Markup: Number,
   }, { _id: false });
 
   const MetalSchema = new mongoose.Schema({
@@ -70,6 +71,7 @@ const enquirySchema = new mongoose.Schema({
     },
     Stamping: String,
     Remarks: String,
+    Budget: String,
     ShippingDate: Date,
     ReferenceImages: [{
         Id: String,

@@ -6,9 +6,9 @@ const chatService = require('./chat.service');
 const { uploadToS3, generatePresignedUrl } = require('../utils/s3');
 const { v4: uuidv4 } = require('uuid');
 const xlsx = require('xlsx');
-const pushService = require('../services/pushNotification.service');
 const codelistsService = require('../services/codelists.service');
 const notificationService = require('../services/notifications.service');
+const reportsService = require('../services/reports.service');
 
 // Get all enquiries
 exports.getEnquiries = async () => {
@@ -130,7 +130,7 @@ exports.updateEnquiry = async (id, data, userId) => {
         'Name', 'Quantity', 'StyleNumber', 'ClientId',
         'Priority', 'Metal', 'Category', 'StoneType',
         'MetalWeight', 'DiamondWeight', 'Stamping',
-        'Remarks', 'ShippingDate'
+        'Remarks', 'ShippingDate', 'Budget'
     ];
 
     const updatedFields = {};
@@ -614,6 +614,7 @@ async function handleCoralUpload(enquiry, files, version, coralCode, userId) {
             excelTableJson.Stones = excelTableJson.Stones.map(stone => ({
                 ...stone,
                 Type: enquiry.StoneType, // Add StoneType from enquiry
+                Markup: 0
             }));
             excelTableJson.Metal = {
                 Weight: excelTableJson.Metal.Weight || null,
@@ -727,6 +728,7 @@ async function handleCadUpload(enquiry, files, version, cadCode, userId) {
             excelTableJson.Stones = excelTableJson.Stones.map(stone => ({
                 ...stone,
                 Type: enquiry.StoneType, // Add StoneType from enquiry
+                Markup: 0
             }));
             excelTableJson.Metal = {
                 Weight: excelTableJson.Metal.Weight || null,
@@ -961,42 +963,7 @@ async function handleExcelDataForCad(file) {
 }
 
 exports.searchEnquiries = async (queryParams) => {
-    // --- 1. Prepare Pagination ---
-    const page = parseInt(queryParams.page, 10) || 1;
-    const limit = parseInt(queryParams.limit, 10) || 25;
-    const pagination = {
-        skip: (page - 1) * limit,
-        limit: limit
-    };
-
-    // --- 2. Prepare Sorting ---
-    const sortBy = queryParams.sortBy || 'AssignedDate'; // Default sort
-    const sortOrder = queryParams.sortOrder === 'asc' ? 1 : -1;
-    const sort = { [sortBy]: sortOrder };
-
-    // --- 3. Extract Search Term ---
-    // This is the value from your main search bar
-    const searchTerm = queryParams.search || null;
-
-    // --- 4. Extract Filters ---
-    // These are all other query params (e.g., status, priority, clientId)
-    const reservedKeys = ['page', 'limit', 'sortBy', 'sortOrder', 'search'];
-    const filters = {};
-    for (const key in queryParams) {
-        // If it's not a reserved key and has a value, add it to filters
-        if (!reservedKeys.includes(key) && queryParams[key]) {
-            filters[key] = queryParams[key];
-        }
-    }
-
-    // Call the repository with the clearly separated objects
-    const result = await repo.search(searchTerm, filters, sort, pagination);
-
-    return {
-        ...result,
-        page,
-        limit
-    };
+    return await searchEnquiriesInternal(queryParams);
 };
 
 exports.getAggregatedCounts = async (queryParams) => {
@@ -1049,23 +1016,23 @@ exports.calculatePricing = async (pricingDetails, clientId) => {
     }
 
     if (clientId === null || clientId === undefined || clientId === "") {
-        loss = pricingDetails.Loss || 0;
-        labour = pricingDetails.Labour || 0;
-        extraCharges = pricingDetails.ExtraCharges || 0;
-        duties = pricingDetails.Duties || 0;
+        loss = pricingDetails?.Loss || 0;
+        labour = pricingDetails?.Labour || 0;
+        extraCharges = pricingDetails?.ExtraCharges || 0;
+        duties = pricingDetails?.Duties || 0;
     }
     else {
         const client = await clientService.getClient(clientId);
-        loss = client.Pricing.Loss || 0;
-        labour = client.Pricing.Labour || 0;
-        extraCharges = client.Pricing.ExtraCharges || 0;
-        duties = client.Pricing.Duties || 0;
+        loss = client?.Pricing?.Loss || 0;
+        labour = client?.Pricing?.Labour || 0;
+        extraCharges = client?.Pricing?.ExtraCharges || 0;
+        duties = client?.Pricing?.Duties || 0;
 
         // Calculate Diamonds Price
         stones = stones.map(stone => {
             const stoneSize = normalizeMmSize(stone.MmSize);
 
-            const matchingDiamond = client.Pricing.Diamonds.find(diamond =>
+            const matchingDiamond = client?.Pricing?.Diamonds.find(diamond =>
                 diamond.Type === stone.Type &&
                 diamond.Shape === stone.Shape &&
                 normalizeMmSize(diamond.MmSize) === stoneSize
@@ -1075,7 +1042,8 @@ exports.calculatePricing = async (pricingDetails, clientId) => {
 
             return {
                 ...stone,
-                Price
+                Price,
+                Markup: 0
             };
         });
 
@@ -1084,7 +1052,7 @@ exports.calculatePricing = async (pricingDetails, clientId) => {
     // Calculate Diamonds Price
     const { diamondsPrice, diamondWeight } = stones.reduce(
         (acc, stone) => {
-            const ratePerCaratOfStone = stone.Price;
+            const ratePerCaratOfStone = stone.Price + (stone.Markup || 0);
             if (ratePerCaratOfStone === undefined || ratePerCaratOfStone === null || ratePerCaratOfStone <= 0) {
                 diamondPriceNotFound = true;
             }
@@ -1102,7 +1070,7 @@ exports.calculatePricing = async (pricingDetails, clientId) => {
     let undercutDiamondsPrice = 0;
     if (undercutPrice > 0) {
         undercutDiamondsPrice = stones.reduce((acc, stone) => {
-            const ratePerCaratOfStone = stone.Price > undercutPrice ? undercutPrice : stone.Price;
+            const ratePerCaratOfStone = (stone.Price + (stone.Markup || 0)) > undercutPrice ? undercutPrice : (stone.Price + (stone.Markup || 0));
             return acc + (stone.CtWeight * ratePerCaratOfStone);
         }, 0);
     }
@@ -1137,7 +1105,8 @@ exports.calculatePricing = async (pricingDetails, clientId) => {
             MmSize: stone.MmSize,
             SieveSize: stone.SieveSize,
             Weight: stone.Weight,
-            Price: parseFloat(stone.Price?.toFixed(3)),
+            Price: parseFloat(stone.Price?.toFixed(3)) || 0,
+            Markup: parseFloat(stone.Markup?.toFixed(3)) || 0,
             Pcs: stone.Pcs,
             CtWeight: stone.CtWeight
         }))
@@ -1179,6 +1148,56 @@ exports.massActionEnquiries = async ({ enquiryIds, updateType, newStatus, userId
         default:
             throw new Error("Invalid updateType");
     }
+};
+
+exports.exportEnquiriesPdf = async (queryParams) => {
+    const data = await searchEnquiriesInternal(queryParams, { noPaging: true });
+    // console.log(`Generating PDF for ${data.rows.length} enquiries`);
+    // console.log(data);
+    return reportsService.buildEnquiryPdf(data.data);
+};
+
+async function searchEnquiriesInternal(queryParams, options = {}) {
+    // --- 1. Prepare Pagination ---
+    const page = parseInt(queryParams.page, 10) || 1;
+    const limit = parseInt(queryParams.limit, 10) || 25;
+    const pagination = options.noPaging ? {
+        skip: 0,
+        limit: 1000
+    } : {
+        skip: (page - 1) * limit,
+        limit: limit
+    };
+
+    // --- 2. Prepare Sorting ---
+    const sortBy = queryParams.sortBy || 'AssignedDate'; // Default sort
+    const sortOrder = queryParams.sortOrder === 'asc' ? 1 : -1;
+    const sort = { [sortBy]: sortOrder };
+
+    // --- 3. Extract Search Term ---
+    // This is the value from your main search bar
+    const searchTerm = queryParams.search || null;
+
+    // --- 4. Extract Filters ---
+    // These are all other query params (e.g., status, priority, clientId)
+    const reservedKeys = ['page', 'limit', 'sortBy', 'sortOrder', 'search'];
+    const filters = {};
+    for (const key in queryParams) {
+        // If it's not a reserved key and has a value, add it to filters
+        if (!reservedKeys.includes(key) && queryParams[key]) {
+            filters[key] = queryParams[key];
+        }
+    }
+
+    // Call the repository with the clearly separated objects
+    const result = await repo.search(searchTerm, filters, sort, pagination);
+    console.log(result);
+
+    return {
+        ...result,
+        page,
+        limit
+    };
 };
 
 

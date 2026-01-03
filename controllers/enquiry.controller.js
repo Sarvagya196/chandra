@@ -196,3 +196,24 @@ exports.massActionEnquiries = async (req, res) => {
     }
 };
 
+exports.exportEnquiriesPdf = async (req, res) => {
+    try {
+        // Reuse same filters/sort from UI (req.query or req.body — your choice)
+        const pdfBuffer = await service.exportEnquiriesPdf(req.query);
+
+        res.setHeader("Content-Type", "application/pdf");
+        res.setHeader(
+            "Content-Disposition",
+            'attachment; filename="enquiries-report.pdf"'
+        );
+
+        res.send(pdfBuffer);
+    } catch (error) {
+        console.error("Error exporting enquiries PDF:", error);
+        res.status(500).json({
+            message: "Failed to generate PDF report",
+            error: error.message
+        });
+    }
+};
+

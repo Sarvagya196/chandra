@@ -7,6 +7,10 @@ const dynamicUpload = require('../middleware/dynamicUpload');
 // GET all enquiries
 // router.get('/', authenticateToken, controller.getEnquiries);
 
+router.get('/export-pdf',
+    authenticateToken,
+    controller.exportEnquiriesPdf);
+
 // Search
 router.get('/search', authenticateToken, controller.searchEnquiries);
 
