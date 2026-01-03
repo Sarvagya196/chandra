@@ -130,7 +130,7 @@ exports.updateEnquiry = async (id, data, userId) => {
         'Name', 'Quantity', 'StyleNumber', 'ClientId',
         'Priority', 'Metal', 'Category', 'StoneType',
         'MetalWeight', 'DiamondWeight', 'Stamping',
-        'Remarks', 'ShippingDate', 'Budget'
+        'Remarks', 'ShippingDate', 'Budget', 'SpecialRemarks', 'ApprovedDate',
     ];
 
     const updatedFields = {};
@@ -149,6 +149,10 @@ exports.updateEnquiry = async (id, data, userId) => {
     let oldStatusHistory = enquiry.StatusHistory.at(-1);
     if (oldStatusHistory.Status != data.Status) {
         changes.push(`Status: from "${oldStatusHistory.Status}" to "${data.Status}"`);
+        if(data.Status === 'Order Placement'){
+            //TODO add changes here for approved date, style number auto generation, PO creation 
+            updatedFields.ApprovedDate = new Date();
+        }
     }
     if (oldStatusHistory.AssignedTo != data.AssignedTo) {
         let oldAssignee = await userService.getUserById(oldStatusHistory.AssignedTo);
