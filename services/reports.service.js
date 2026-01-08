@@ -1,6 +1,7 @@
 // reports.service.js — PDF generation using HTML-to-PDF (matching React Native format)
 const puppeteer = require('puppeteer');
 const clientService = require("./client.service");
+const userService = require("./user.service");
 const { generatePresignedUrl } = require('../utils/s3');
 const https = require('https');
 const http = require('http');
@@ -10,32 +11,20 @@ async function buildEnquiryPdf(rows = []) {
   const startTime = Date.now();
   console.log(`[PDF] Starting PDF generation for ${rows.length} enquiries`);
   
-  // ---- Optimize: Only fetch clients that are actually needed ----
-  const uniqueClientIds = [...new Set(rows.map(r => r.ClientId).filter(Boolean))];
-  console.log(`[PDF] Fetching ${uniqueClientIds.length} unique clients`);
+  // ---- Fetch all clients and users (cached, lightweight, <50 records) ----
+  console.log(`[PDF] Fetching clients and users...`);
   
-  // Fetch only needed clients (more efficient than fetching all)
-  const Client = require('../models/client.model');
-  const clients = await Client.find({ 
-    _id: { $in: uniqueClientIds } 
-  }).select({ Name: 1, _id: 1 }).lean();
-  
+  // Get all clients (returns Name and _id, cached)
+  const clients = await clientService.getClients();
   const clientsMap = clients.reduce((acc, c) => {
     acc[c._id.toString()] = c.Name;
     return acc;
   }, {});
   
-  // ---- Fetch user names for AssignedTo ----
-  const uniqueUserIds = [...new Set(rows.map(r => r.AssignedTo).filter(Boolean))];
-  console.log(`[PDF] Fetching ${uniqueUserIds.length} unique users for AssignedTo`);
-  
-  const User = require('../models/user.model');
-  const users = await User.find({ 
-    _id: { $in: uniqueUserIds } 
-  }).select({ Name: 1, _id: 1 }).lean();
-  
+  // Get all users (returns name and _id, cached)
+  const users = await userService.getUsers();
   const usersMap = users.reduce((acc, u) => {
-    acc[u._id.toString()] = u.Name;
+    acc[u._id.toString()] = u.name; // User model uses lowercase 'name'
     return acc;
   }, {});
   
