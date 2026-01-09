@@ -11,6 +11,14 @@ exports.createMessage = async (data) => {
     }
 };
 
+exports.deleteMessageById = async (messageId) => {
+    try {
+        return await repo.deleteMessageById(messageId);
+    } catch (err) {
+        throw new Error('Error deleting message: ' + err.message);
+    }
+};
+
 //Delete all messages by chat Id
 exports.deleteMessagesByChatId = async (chatId) => {
     try {

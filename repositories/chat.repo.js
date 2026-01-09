@@ -211,7 +211,6 @@ exports.updateLastMessage = async (chatId, messageId) => {
 exports.deleteChatsByEnquiryId = async (enquiryId) => {
   try {
     const result = await Chat.deleteMany({ EnquiryId: enquiryId });
-    console.log(`🗑️ Deleted ${result.deletedCount} chats for Enquiry ${enquiryId}`);
     return result;
   } catch (err) {
     console.error(`❌ Error deleting chats for Enquiry ${enquiryId}:`, err);

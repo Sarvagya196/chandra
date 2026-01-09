@@ -336,15 +336,8 @@ function initSocket(server) {
             }
         });
 
-        /**
-         * TODO Typing indicators
-         */
-        // socket.on('typing', ({ chatId, userId, isTyping }) => {
-        //     socket.to(`chat_${chatId}`).emit('userTyping', { userId, isTyping });
-        // });
-
         socket.on('typing', async ({ chatId, userId, isTyping }) => {
-            socket.to(`chat_${chatId}`).emit('userTyping', { userId, isTyping,chatId });
+            socket.to(`chat_${chatId}`).emit('userTyping', { userId, isTyping, chatId });
         });
 
         /**

@@ -30,7 +30,6 @@ exports.createChat = async (EnquiryId, EnquiryName, Type, Participants) => {
     // Check for existing chat
     const existingChat = await repo.findChatByEnquiryAndType(EnquiryId, Type);
     if (existingChat) {
-      console.log(`Chat already exists for Enquiry ${EnquiryId} (${Type})`);
       return existingChat;
     }
 
@@ -42,7 +41,6 @@ exports.createChat = async (EnquiryId, EnquiryName, Type, Participants) => {
       Participants,
     });
 
-    console.log(`Created chat for Enquiry ${EnquiryId} (${Type})`);
     return chat;
   } catch (error) {
     // Handle duplicate key error specifically
@@ -64,7 +62,6 @@ exports.createChat = async (EnquiryId, EnquiryName, Type, Participants) => {
             Type,
             Participants,
           });
-          console.log(`✅ Successfully created chat after cleanup for Enquiry ${EnquiryId} (${Type})`);
           return retryChat;
         } catch (retryError) {
           console.error(`❌ Retry failed after cleanup:`, retryError);
@@ -87,7 +84,6 @@ exports.createChat = async (EnquiryId, EnquiryName, Type, Participants) => {
 exports.updateParticipants = async (EnquiryId, Type, Participants) => {
   try {
     const result = await repo.updateParticipants(EnquiryId, Type, Participants);
-    console.log(`Updated participants for chat ${Type} (Enquiry ${EnquiryId})`);
     return result;
   } catch (error) {
     console.error(`Error updating participants for chat ${Type} (Enquiry ${EnquiryId}):`, error);
@@ -105,7 +101,6 @@ exports.updateParticipants = async (EnquiryId, Type, Participants) => {
 exports.addParticipantIfMissing = async (EnquiryId, Type, UserId) => {
   try {
     await repo.addParticipantIfMissing(EnquiryId, Type, UserId);
-    console.log(`Checked participant ${UserId} for chat (${Type}) Enquiry ${EnquiryId}`);
   } catch (err) {
     console.error(`Failed to add participant ${UserId} to chat (${Type}) for Enquiry ${EnquiryId}`, err);
   }
@@ -129,6 +124,7 @@ exports.getChatsForUser = async (userId, page = 1, limit = 10, search = '') => {
       // Count messages where:
       // 1. SenderId !== currentUserId (messages not sent by current user)
       // 2. AND current user's ID is NOT in ReadBy array (message not read by current user)
+      //TODO remove Message model dependency
       const unreadCount = await Message.countDocuments({
         ChatId: chat._id,
         SenderId: { $ne: userId },
@@ -150,8 +146,6 @@ exports.getChatsForUser = async (userId, page = 1, limit = 10, search = '') => {
           ? '🎥 Video'
           : ''
         : '(no messages yet)';
-
-        console.log("lm=========>", lm);
 
       return {
         _id: chat._id,
@@ -204,7 +198,6 @@ exports.deleteChatsByEnquiryId = async (enquiryId) => {
   try {
     const chats = await repo.findChatsByEnquiryId(enquiryId);
     if (!chats || chats.length === 0) {
-      console.log(`ℹ️ No chats found for Enquiry ${enquiryId}`);
       return { success: true, deletedChats: 0, deletedMessages: 0 };
     }
 
@@ -216,7 +209,6 @@ exports.deleteChatsByEnquiryId = async (enquiryId) => {
     // 3️⃣ Delete the chat documents themselves
     const chatResult = await repo.deleteChatsByEnquiryId(enquiryId);
     
-    console.log(`🧹 Cleanup complete for Enquiry ${enquiryId}`);
     return {
       success: true,
       deletedChats: chatResult.deletedCount,

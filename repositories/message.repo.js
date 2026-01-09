@@ -13,6 +13,19 @@ exports.createMessage = async (message) => {
 };
 
 /**
+ * Deletes a message by its ID.
+ * @param {ObjectId} messageId - The ID of the message to delete.
+ */
+exports.deleteMessageById = async (messageId) => {
+    try {
+        const result = await Message.deleteOne({ _id: messageId });
+        return result;
+    } catch (error) {
+        throw new Error('Error deleting message with ID ' + messageId + ': ' + error.message);
+    }
+};
+
+/**
  * Fetch all messages for a specific ChatId, sorted by Timestamp ascending.
  * @param {ObjectId} chatId - The chat whose messages to fetch.
  */
