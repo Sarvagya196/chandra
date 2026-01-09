@@ -434,7 +434,11 @@ async function buildEnquiryPdf(rows = []) {
     };
     if (process.env.PUPPETEER_EXECUTABLE_PATH) {
       launchOptions.executablePath = process.env.PUPPETEER_EXECUTABLE_PATH;
+      const fs = require('fs');
+      console.log('[PDF][CHECK] Chromium exists:', fs.existsSync(process.env.PUPPETEER_EXECUTABLE_PATH));
       console.log(`[PDF] Using Chrome from PUPPETEER_EXECUTABLE_PATH: ${launchOptions.executablePath}`);
+    } else {      
+      console.log('[PDF] Using bundled Chrome (local development mode)');
     }
 
     browser = await puppeteer.launch(launchOptions);
