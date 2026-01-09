@@ -413,7 +413,8 @@ async function buildEnquiryPdf(rows = []) {
 
   let browser;
   try {
-    browser = await puppeteer.launch({
+    // Puppeteer launch configuration
+    const launchOptions = {
       headless: true,
       args: [
         '--no-sandbox',
@@ -430,7 +431,14 @@ async function buildEnquiryPdf(rows = []) {
         '--max-old-space-size=4096' // Increase memory limit
       ],
       timeout: 120000 // 120 second timeout for large PDFs
-    });
+    };
+    if (process.env.PUPPETEER_EXECUTABLE_PATH) {
+      launchOptions.executablePath = process.env.PUPPETEER_EXECUTABLE_PATH;
+      console.log(`[PDF] Using Chrome from PUPPETEER_EXECUTABLE_PATH: ${launchOptions.executablePath}`);
+    }
+
+    browser = await puppeteer.launch(launchOptions);
+    console.log('[PDF] Puppeteer launched successfully');
     
     const page = await browser.newPage();
     
