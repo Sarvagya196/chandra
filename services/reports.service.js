@@ -432,10 +432,10 @@ async function buildEnquiryPdf(rows = []) {
       ],
       timeout: 120000 // 120 second timeout for large PDFs
     };
-    if (process.env.PUPPETEER_EXECUTABLE_PATH) {
-      launchOptions.executablePath = process.env.PUPPETEER_EXECUTABLE_PATH;
-      console.log(`[PDF] Using Chrome from PUPPETEER_EXECUTABLE_PATH: ${launchOptions.executablePath}`);
-    }
+    // if (process.env.PUPPETEER_EXECUTABLE_PATH) {
+    //   launchOptions.executablePath = process.env.PUPPETEER_EXECUTABLE_PATH;
+    //   console.log(`[PDF] Using Chrome from PUPPETEER_EXECUTABLE_PATH: ${launchOptions.executablePath}`);
+    // }
 
     browser = await puppeteer.launch(launchOptions);
     console.log('[PDF] Puppeteer launched successfully');
