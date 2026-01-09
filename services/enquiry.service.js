@@ -1156,9 +1156,13 @@ exports.massActionEnquiries = async ({ enquiryIds, updateType, newStatus, userId
 };
 
 exports.exportEnquiriesPdf = async (queryParams) => {
+    const startTime = Date.now();
+    console.log(`[PDF Export] Starting PDF export with filters:`, queryParams);
+    
     const data = await searchEnquiriesInternal(queryParams, { noPaging: true });
-    // console.log(`Generating PDF for ${data.rows.length} enquiries`);
-    // console.log(data);
+    const queryTime = Date.now() - startTime;
+    console.log(`[PDF Export] Fetched ${data.data?.length || 0} enquiries in ${queryTime}ms`);
+    
     return reportsService.buildEnquiryPdf(data.data);
 };
 
@@ -1168,7 +1172,8 @@ async function searchEnquiriesInternal(queryParams, options = {}) {
     const limit = parseInt(queryParams.limit, 10) || 25;
     const pagination = options.noPaging ? {
         skip: 0,
-        limit: 1000
+        // For PDF exports, allow up to 10000 records (was 1000)
+        limit: Math.min(parseInt(queryParams.limit, 10) || 10000, 10000)
     } : {
         skip: (page - 1) * limit,
         limit: limit
