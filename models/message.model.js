@@ -48,7 +48,13 @@ const MessageSchema = new mongoose.Schema({
   }],
 
   // ⏰ Timestamp
-  Timestamp: { type: Date, default: Date.now }
+  Timestamp: { type: Date, default: Date.now },
+
+  // 🚩 Soft delete flag
+  IsDeleted: { type: Boolean, default: false },
+
+  // Edited message flag
+  IsEdited: { type: Boolean, default: false }
 
 }, { timestamps: true });
 

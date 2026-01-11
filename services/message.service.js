@@ -11,6 +11,31 @@ exports.createMessage = async (data) => {
     }
 };
 
+exports.getMessageById = async (messageId) => {
+    try {
+        return await repo.getMessageById(messageId);
+    } catch (err) {
+        throw new Error('Error retrieving message: ' + err.message);
+    }
+};
+
+exports.editMessage = async (messageId, userId, newMessage) => {
+    try {
+        return await repo.editMessage(messageId, userId, newMessage);
+    } catch (err) {
+        throw new Error('Error editing message: ' + err.message);
+    }
+};
+
+exports.softDeleteMessage = async (messageId, userId) => {
+    try {
+        return await repo.softDeleteMessage(messageId, userId);
+    } catch (err) {
+        throw new Error('Error deleting message: ' + err.message);
+    }
+};
+
+
 exports.deleteMessageById = async (messageId) => {
     try {
         return await repo.deleteMessageById(messageId);

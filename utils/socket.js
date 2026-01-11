@@ -293,6 +293,120 @@ function initSocket(server) {
         });
 
 
+        // Handle editing a message
+        socket.on('editMessage', async (data) => {
+            const { messageId, userId, newMessage } = data;
+
+            try {
+                // 1️⃣ Fetch message
+                const message = await messageService.getMessageById(messageId);
+
+                if (!message) {
+                    socket.emit('error', { message: 'Message not found' });
+                    return;
+                }
+
+                // 2️⃣ Permission check
+                if (message.SenderId.toString() !== userId.toString()) {
+                    socket.emit('error', { message: 'You cannot edit this message' });
+                    return;
+                }
+
+                // 3️⃣ Cannot edit deleted message
+                if (message.IsDeleted) {
+                    socket.emit('error', { message: 'Message already deleted' });
+                    return;
+                }
+
+                // 4️⃣ Update message
+                await messageService.editMessage(messageId, userId, newMessage);
+
+                // 5️⃣ Get chat
+                const chat = await chatService.getChatByChatId(message.ChatId);
+
+                // 6️⃣ Prepare payload
+                const payload = {
+                    _id: message._id.toString(),
+                    ChatId: message.ChatId.toString(),
+                    Message: message.Message,
+                    IsEdited: true,
+                    EditedAt: message.EditedAt
+                };
+
+                // 7️⃣ Emit to chat room (open conversations)
+                io.to(`chat_${message.ChatId}`).emit('messageEdited', payload);
+
+                // 8️⃣ Emit to all participants (chat list updates)
+                const participants = chat.Participants || [];
+                participants.forEach((participantId) => {
+                    io.to(`user:${participantId.toString()}`).emit('messageEdited', payload);
+                });
+                console.log(`✏️ Message ${messageId} edited by ${userId}`);
+
+            } catch (err) {
+                console.error('❌ Edit message error:', err);
+                socket.emit('error', { message: 'Failed to edit message' });
+            }
+        });
+
+        // Handle deleting a message
+        socket.on('deleteMessage', async (data) => {
+            const { messageId, userId } = data;
+
+            try {
+                // 1️⃣ Fetch message
+                const message = await messageService.getMessageById(messageId);
+
+                if (!message) {
+                    socket.emit('error', { message: 'Message not found' });
+                    return;
+                }
+
+                // 2️⃣ Permission check
+                if (message.SenderId.toString() !== userId.toString()) {
+                    socket.emit('error', { message: 'You cannot delete this message' });
+                    return;
+                }
+
+                // 3️⃣ Prevent double delete
+                if (message.IsDeleted) {
+                    socket.emit('error', { message: 'Message already deleted' });
+                    return;
+                }
+
+                // 4️⃣ Soft delete
+                await messageService.softDeleteMessage(messageId, userId);
+
+
+                // 5️⃣ Fetch chat
+                const chat = await chatService.getChatByChatId(message.ChatId);
+
+                const payload = {
+                    _id: message._id.toString(),
+                    ChatId: message.ChatId.toString(),
+                    IsDeleted: true,
+                    DeletedAt: message.DeletedAt
+                };
+
+                // 6️⃣ Emit to open chat windows
+                io.to(`chat_${message.ChatId}`).emit('messageDeleted', payload);
+
+                // 7️⃣ Emit to chat list users
+                const participants = chat.Participants || [];
+                participants.forEach((participantId) => {
+                    io.to(`user:${participantId.toString()}`).emit('messageDeleted', payload);
+                });
+                console.log(`🗑️ Message ${messageId} deleted by ${userId}`);
+
+            } catch (err) {
+                console.error('❌ Delete message error:', err);
+                socket.emit('error', { message: 'Failed to delete message' });
+            }
+        });
+
+
+
+
         /**
          * 🆕 Handle marking messages as read (for chat list unread count updates)
          */

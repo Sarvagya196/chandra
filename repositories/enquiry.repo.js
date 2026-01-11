@@ -148,9 +148,11 @@ exports.search = async (searchTerm, filters, sort, pagination) => {
     // These filters must run *after* $addFields (Stage 3)
     const postMatchQuery = {};
     
-    // Status (filterable)
-    if (filters.status) {
-        postMatchQuery.CurrentStatus = filters.status;
+    // Status (filterable) — supports single or multi
+    if (filters.status?.length) {
+        postMatchQuery.CurrentStatus = {
+            $in: Array.isArray(filters.status) ? filters.status : [filters.status]
+        };
     }
     // AssignedTo (filterable)
     if (filters.assignedTo) {

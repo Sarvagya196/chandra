@@ -12,6 +12,53 @@ exports.createMessage = async (message) => {
   }
 };
 
+exports.getMessageById = async (messageId) => {
+    try {
+        return await Message.findById(messageId).lean();
+    } catch (error) {
+        throw new Error('Error retrieving message with ID ' + messageId + ': ' + error.message);
+    }
+};
+
+exports.editMessage = async (messageId, userId, newMessage) => {
+    return Message.findOneAndUpdate(
+        {
+            _id: messageId,
+            SenderId: userId,
+            IsDeleted: { $ne: true }
+        },
+        {
+            $set: {
+                Message: newMessage,
+                IsEdited: true,
+            }
+        },
+        { new: true }
+    );
+};
+
+exports.softDeleteMessage = async (messageId, userId) => {
+    return Message.findOneAndUpdate(
+        {
+            _id: messageId,
+            SenderId: userId,
+            IsDeleted: { $ne: true }
+        },
+        {
+            $set: {
+                IsDeleted: true,
+                Message: '',
+                MediaUrl: null,
+                MediaKey: null,
+                MediaName: null,
+                MediaSize: null
+            }
+        },
+        { new: true }
+    );
+};
+
+
 /**
  * Deletes a message by its ID.
  * @param {ObjectId} messageId - The ID of the message to delete.
