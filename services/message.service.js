@@ -114,7 +114,8 @@ exports.getMessagesForChat = async (chatId, userId, before, limit = 20) => {
       Timestamp: msg.Timestamp,
       IsRead:
         msg.ReadBy?.some((receipt) => receipt.userId?.toString() === userId.toString()) || false,
-      // ✅ ReadBy: Array of objects with userId and readAt timestamp (for read receipts)
+      IsEdited: msg.IsEdited || false,
+      IsDeleted: msg.IsDeleted || false,
       // Format: [{ userId: "user123", readAt: "2024-01-15T10:35:23.456Z" }]
       ReadBy: (msg.ReadBy || []).map((receipt) => ({
         userId: receipt.userId?.toString() || receipt.userId,
@@ -141,6 +142,9 @@ exports.getMessagesForChat = async (chatId, userId, before, limit = 20) => {
             Size: msg.MediaSize,
           }
         : null,
+      ...(msg.AudioDuration && {
+        audioDuration: msg.AudioDuration
+      }),
     }))
     .reverse(); // oldest → newest for UI
 

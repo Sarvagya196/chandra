@@ -111,6 +111,7 @@ exports.getChatsForUserAgg = async (userId, page = 1, limit = 10, search = '') =
           Message: '$LastMessageDoc.Message',
           MessageType: '$LastMessageDoc.MessageType',
           Timestamp: '$LastMessageDoc.Timestamp',
+          AudioDuration: '$LastMessageDoc.AudioDuration', // ✅ Include AudioDuration for audio messages
           Sender: {
             _id: '$LastMessageSender._id',
             Name: '$LastMessageSender.Name'

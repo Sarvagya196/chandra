@@ -31,7 +31,7 @@ const MessageSchema = new mongoose.Schema({
   // 🎞️ Message type
   MessageType: { 
     type: String, 
-    enum: ['text', 'image', 'video', 'file'], 
+    enum: ['text', 'image', 'video', 'file', 'audio'], 
     default: 'text' 
   },
 
@@ -40,6 +40,9 @@ const MessageSchema = new mongoose.Schema({
   MediaName: { type: String },
   MediaUrl: { type: String },
   MediaSize: { type: Number },
+  
+  // 🎵 Audio duration (for audio messages, format: "MM:SS")
+  AudioDuration: { type: String },
 
   // 👀 Read receipts with timestamps
   ReadBy: [{

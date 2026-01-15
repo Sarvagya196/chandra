@@ -144,6 +144,10 @@ exports.getChatsForUser = async (userId, page = 1, limit = 10, search = '') => {
           ? '📷 Photo'
           : lm.MessageType === 'video'
           ? '🎥 Video'
+          : lm.MessageType === 'audio'
+          ? '🎤 Voice note'
+          : lm.MessageType === 'file'
+          ? '📎 File'
           : ''
         : '(no messages yet)';
 
@@ -154,8 +158,12 @@ exports.getChatsForUser = async (userId, page = 1, limit = 10, search = '') => {
         Type: chat.Type,
         LastMessage: {
           Text: messageText,
+          MessageType: lm?.MessageType || null, // Include MessageType for frontend to display icons
           Timestamp: lm?.Timestamp || chat.UpdatedAt,
           Sender: lm?.Sender || null,
+          ...(lm?.MessageType === 'audio' && lm.AudioDuration && {
+            AudioDuration: lm.AudioDuration
+          }),
         },
         UnreadCount: unreadCount,
         UpdatedAt: chat.UpdatedAt,
