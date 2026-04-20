@@ -1,5 +1,4 @@
 const repo = require('../repositories/chat.repo');
-const Message = require('../models/message.model');
 const messageService = require('../services/message.service');
 
 /**
@@ -118,58 +117,41 @@ exports.getChatsForUser = async (userId, page = 1, limit = 10, search = '') => {
   const { total, data } = await repo.getChatsForUserAgg(userId, page, limit, search);
 
   // Format chats for frontend
-  const formatted = await Promise.all(
-    data.map(async (chat) => {
-      // Compute unread message count based on ReadBy array
-      // Count messages where:
-      // 1. SenderId !== currentUserId (messages not sent by current user)
-      // 2. AND current user's ID is NOT in ReadBy array (message not read by current user)
-      //TODO remove Message model dependency
-      const unreadCount = await Message.countDocuments({
-        ChatId: chat._id,
-        SenderId: { $ne: userId },
-        $or: [
-          { ReadBy: { $exists: false } },           // ReadBy field doesn't exist
-          { ReadBy: { $size: 0 } },                 // ReadBy array is empty
-          { 'ReadBy.userId': { $nin: [userId] } }   // Current user not in ReadBy array (using $nin = not in)
-        ]
-      });
+  const formatted = data.map((chat) => {
+    // Prepare last message preview
+    const lm = chat.LastMessage;
+    const messageText = lm
+      ? lm.MessageType === 'text'
+        ? lm.Message
+        : lm.MessageType === 'image'
+        ? '📷 Photo'
+        : lm.MessageType === 'video'
+        ? '🎥 Video'
+        : lm.MessageType === 'audio'
+        ? '🎤 Voice note'
+        : lm.MessageType === 'file'
+        ? '📎 File'
+        : ''
+      : '(no messages yet)';
 
-      // Prepare last message preview
-      const lm = chat.LastMessage;
-      const messageText = lm
-        ? lm.MessageType === 'text'
-          ? lm.Message
-          : lm.MessageType === 'image'
-          ? '📷 Photo'
-          : lm.MessageType === 'video'
-          ? '🎥 Video'
-          : lm.MessageType === 'audio'
-          ? '🎤 Voice note'
-          : lm.MessageType === 'file'
-          ? '📎 File'
-          : ''
-        : '(no messages yet)';
-
-      return {
-        _id: chat._id,
-        EnquiryId: chat.EnquiryId,
-        EnquiryName: chat.EnquiryName,
-        Type: chat.Type,
-        LastMessage: {
-          Text: messageText,
-          MessageType: lm?.MessageType || null, // Include MessageType for frontend to display icons
-          Timestamp: lm?.Timestamp || chat.UpdatedAt,
-          Sender: lm?.Sender || null,
-          ...(lm?.MessageType === 'audio' && lm.AudioDuration && {
-            AudioDuration: lm.AudioDuration
-          }),
-        },
-        UnreadCount: unreadCount,
-        UpdatedAt: chat.UpdatedAt,
-      };
-    })
-  );
+    return {
+      _id: chat._id,
+      EnquiryId: chat.EnquiryId,
+      EnquiryName: chat.EnquiryName,
+      Type: chat.Type,
+      LastMessage: {
+        Text: messageText,
+        MessageType: lm?.MessageType || null, // Include MessageType for frontend to display icons
+        Timestamp: lm?.Timestamp || chat.UpdatedAt,
+        Sender: lm?.Sender || null,
+        ...(lm?.MessageType === 'audio' && lm.AudioDuration && {
+          AudioDuration: lm.AudioDuration
+        }),
+      },
+      UnreadCount: chat.UnreadCount,  // ✅ Use from aggregation directly
+      UpdatedAt: chat.UpdatedAt,
+    };
+  });
 
   return {
     Total: total,

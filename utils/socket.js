@@ -88,9 +88,8 @@ function initSocket(server) {
                 socket.data.chatId = chatId;
 
                 await chatService.markChatAsRead(chatId, [userId]);
-                await messageService.markMessagesAsRead(chatId, [userId]);
 
-                // ✅ Notify others in the chat (for read ticks)
+                // ✅ Notify others in the chat (for read ticks) TODO do we need to send array ?
                 io.to(`chat_${chatId}`).emit('messagesRead', { chatId, userIds: [userId] });
 
                 console.log(`🟢 ${userId} joined room chat_${chatId}`);
@@ -207,25 +206,25 @@ function initSocket(server) {
                 // 3️⃣ Identify currently active users in this chat
                 const connectedSockets = await io.in(`chat_${chatId}`).fetchSockets();
                 const activeUserIds = connectedSockets.map((s) => s.data.userId);
-                const readers = activeUserIds.filter((id) => id !== userId);
+                const readers = activeUserIds.filter((id) => id !== userId); //TODO what about the one sending msg
 
-                // 6️⃣ Mark message as read for all active users (except sender)
+                // 6️⃣ Mark message as read for all active users (except sender) TODO count handle
                 if (readers.length > 0) {
                     await chatService.markChatAsRead(chatId, readers);
-                    await messageService.markMessagesAsRead(chatId, readers);
+                    // await messageService.markMessagesAsRead(chatId, readers);
 
                     // Calculate unread counts for each reader and emit to their personal rooms
-                    const unreadCountPromises = readers.map(async (readerId) => {
-                        const unreadCount = await getUnreadCount(chatId, readerId);
-                        // Emit to personal room for chat list updates
-                        io.to(`user:${readerId}`).emit('messagesRead', {
-                            chatId: chatId.toString(),
-                            userId: readerId.toString(),
-                            unreadCount: unreadCount
-                        });
-                        return { userId: readerId, unreadCount };
-                    });
-                    await Promise.all(unreadCountPromises);
+                    // const unreadCountPromises = readers.map(async (readerId) => {
+                    //     const unreadCount = await getUnreadCount(chatId, readerId);
+                    //     // Emit to personal room for chat list updates
+                    //     io.to(`user:${readerId}`).emit('messagesRead', {
+                    //         chatId: chatId.toString(),
+                    //         userId: readerId.toString(),
+                    //         unreadCount: unreadCount
+                    //     });
+                    //     return { userId: readerId, unreadCount };
+                    // });
+                    // await Promise.all(unreadCountPromises);
 
                     // Also notify everyone in the chat room (for read receipts/ticks)
                     io.to(`chat_${chatId}`).emit('messagesRead', {
@@ -391,7 +390,7 @@ function initSocket(server) {
                 // 6️⃣ Emit to open chat windows
                 io.to(`chat_${message.ChatId}`).emit('messageDeleted', payload);
 
-                // 7️⃣ Emit to chat list users
+                // 7️⃣ Emit to chat list users TODO why are we emiting to all participants when we have already emitted to room ?
                 const participants = chat.Participants || [];
                 participants.forEach((participantId) => {
                     io.to(`user:${participantId.toString()}`).emit('messageDeleted', payload);
@@ -410,45 +409,45 @@ function initSocket(server) {
         /**
          * 🆕 Handle marking messages as read (for chat list unread count updates)
          */
-        socket.on('markMessagesRead', async (data) => {
-            const { chatId, messageIds } = data;
-            const userId = socket.userId;
+        // socket.on('markMessagesRead', async (data) => {
+        //     const { chatId, messageIds } = data;
+        //     const userId = socket.userId;
 
-            try {
-                if (!chatId) {
-                    socket.emit('error', { message: 'chatId is required' });
-                    return;
-                }
+        //     try {
+        //         if (!chatId) {
+        //             socket.emit('error', { message: 'chatId is required' });
+        //             return;
+        //         }
 
-                // 1️⃣ Mark messages as read in database
-                await chatService.markChatAsRead(chatId, [userId]);
-                await messageService.markMessagesAsRead(chatId, [userId]);
+        //         // 1️⃣ Mark messages as read in database
+        //         await chatService.markChatAsRead(chatId, [userId]);
+        //         await messageService.markMessagesAsRead(chatId, [userId]);
 
-                // 2️⃣ Recalculate unread count for this user
-                const unreadCount = await getUnreadCount(chatId, userId);
+        //         // 2️⃣ Recalculate unread count for this user
+        //         const unreadCount = await getUnreadCount(chatId, userId);
 
-                // 3️⃣ Emit messagesRead event to user's personal room
-                io.to(`user:${userId}`).emit('messagesRead', {
-                    chatId: chatId.toString(),
-                    userId: userId.toString(),
-                    unreadCount: unreadCount,
-                    messageIds: messageIds || []
-                });
+        //         // 3️⃣ Emit messagesRead event to user's personal room
+        //         io.to(`user:${userId}`).emit('messagesRead', {
+        //             chatId: chatId.toString(),
+        //             userId: userId.toString(),
+        //             unreadCount: unreadCount,
+        //             messageIds: messageIds || []
+        //         });
 
-                console.log(`✅ User ${userId} marked messages as read in chat ${chatId}. Unread count: ${unreadCount}`);
+        //         console.log(`✅ User ${userId} marked messages as read in chat ${chatId}. Unread count: ${unreadCount}`);
 
-                // 4️⃣ Also notify others in the chat room (for read receipts/ticks)
-                io.to(`chat_${chatId}`).emit('messagesRead', {
-                    chatId: chatId.toString(),
-                    userIds: [userId.toString()],
-                    unreadCount: unreadCount
-                });
+        //         // 4️⃣ Also notify others in the chat room (for read receipts/ticks)
+        //         io.to(`chat_${chatId}`).emit('messagesRead', {
+        //             chatId: chatId.toString(),
+        //             userIds: [userId.toString()],
+        //             unreadCount: unreadCount
+        //         });
 
-            } catch (err) {
-                console.error('❌ Error marking messages as read:', err);
-                socket.emit('error', { message: 'Failed to mark messages as read' });
-            }
-        });
+        //     } catch (err) {
+        //         console.error('❌ Error marking messages as read:', err);
+        //         socket.emit('error', { message: 'Failed to mark messages as read' });
+        //     }
+        // });
 
         socket.on('typing', async ({ chatId, userId, isTyping }) => {
             socket.to(`chat_${chatId}`).emit('userTyping', { userId, isTyping, chatId });

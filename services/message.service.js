@@ -116,7 +116,6 @@ exports.getMessagesForChat = async (chatId, userId, before, limit = 20) => {
         msg.ReadBy?.some((receipt) => receipt.userId?.toString() === userId.toString()) || false,
       IsEdited: msg.IsEdited || false,
       IsDeleted: msg.IsDeleted || false,
-      // Format: [{ userId: "user123", readAt: "2024-01-15T10:35:23.456Z" }]
       ReadBy: (msg.ReadBy || []).map((receipt) => ({
         userId: receipt.userId?.toString() || receipt.userId,
         readAt: receipt.readAt // Date object will be serialized to ISO 8601 string in JSON response
@@ -158,7 +157,7 @@ exports.getMessagesForChat = async (chatId, userId, before, limit = 20) => {
 };
 
 
-/**
+/** todo not needed
  * Mark messages as read manually (for socket event or UI action).
  */
 exports.markMessagesAsRead = async (chatId, userIds) => {

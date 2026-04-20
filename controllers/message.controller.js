@@ -1,24 +1,5 @@
 const messageService = require('../services/message.service');
 
-
-//Removed as this will always be from socket
-// exports.saveMessage = async ({ enquiryId, senderId, message, messageType, mediaKey, mediaName }) => {
-//   try {
-//     const savedMessage = await messageService.createMessage({
-//       enquiryId,
-//       senderId,
-//       message,
-//       messageType,
-//       mediaKey,
-//       mediaName
-//     });
-//     return savedMessage;
-//   } catch (error) {
-//     console.error('❌ Error saving chat message:', error);
-//     throw new Error('Failed to save chat message.');
-//   }
-// };
-
 exports.uploadMedia = async (req, res) => {
     const file = req.file;
     try {

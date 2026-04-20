@@ -72,7 +72,7 @@ exports.deleteMessageById = async (messageId) => {
     }
 };
 
-/**
+/** todo unused remove
  * Fetch all messages for a specific ChatId, sorted by Timestamp ascending.
  * @param {ObjectId} chatId - The chat whose messages to fetch.
  */
@@ -106,7 +106,7 @@ exports.getMessagesBefore = async (chatId, before, limit = 20) => {
 
 
 /**
- * Marks all messages in a chat as read by given users with timestamps.
+ * Marks all messages in a chat as read by given users with timestamps. todo not needed
  * @param {ObjectId} chatId
  * @param {Array<ObjectId>|ObjectId} userIds - Single user ID or array of user IDs
  */
