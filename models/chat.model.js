@@ -19,7 +19,8 @@ const ChatSchema = new mongoose.Schema({
   LastRead: [
     {
       UserId: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
-      LastReadAt: { type: Date, default: null }
+      LastReadAt: { type: Date, default: null },
+      UnreadCount: { type: Number, default: 0 }
     }
   ],
 

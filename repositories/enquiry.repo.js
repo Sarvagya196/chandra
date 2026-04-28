@@ -101,6 +101,9 @@ exports.search = async (searchTerm, filters, sort, pagination) => {
             { "Coral.CoralCode": { $regex: searchTerm, $options: 'i' } },
             { "Cad.CadCode": { $regex: searchTerm, $options: 'i' } },
             { GatiOrderNumber: { $regex: searchTerm, $options: 'i' } },
+            { Stamping: { $regex: searchTerm, $options: 'i' } },
+            { Remarks: { $regex: searchTerm, $options: 'i' } },
+            { SpecialRemarks: { $regex: searchTerm, $options: 'i' } },
         ];
     }
 

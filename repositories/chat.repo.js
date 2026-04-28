@@ -107,6 +107,25 @@ exports.getChatsForUserAgg = async (userId, page = 1, limit = 10, search = '') =
         UpdatedAt: 1,
         Participants: 1,
         LastRead: 1,
+        UnreadCount: {
+          $let: {
+            vars: {
+              userRead: {
+                $arrayElemAt: [
+                  {
+                    $filter: {
+                      input: '$LastRead',
+                      as: 'lr',
+                      cond: { $eq: ['$$lr.UserId', new ObjectId(String(userId))] }
+                    }
+                  },
+                  0
+                ]
+              }
+            },
+            in: { $ifNull: ['$$userRead.UnreadCount', 0] }
+          }
+        },
         LastMessage: {
           Message: '$LastMessageDoc.Message',
           MessageType: '$LastMessageDoc.MessageType',
@@ -167,12 +186,23 @@ exports.updateLastRead = async (chatId, userIds) => {
   if (!Array.isArray(userIds)) userIds = [userIds];
   const now = new Date();
 
-  // Step 1️⃣ Add new users to LastRead if missing
+  // Step 1️⃣ Add new users to LastRead if missing (SAFE FILTER)
   const addOps = userIds.map(userId => ({
     updateOne: {
-      filter: { _id: chatId, 'LastRead.UserId': { $ne: userId } },
+      filter: {
+        _id: chatId,
+        LastRead: {
+          $not: { $elemMatch: { UserId: userId } }
+        }
+      },
       update: {
-        $push: { LastRead: { UserId: userId, LastReadAt: now } },
+        $push: {
+          LastRead: {
+            UserId: userId,
+            LastReadAt: now,
+            UnreadCount: 0
+          }
+        },
         $set: { UpdatedAt: now }
       }
     }
@@ -182,12 +212,13 @@ exports.updateLastRead = async (chatId, userIds) => {
     await Chat.bulkWrite(addOps);
   }
 
-  // Step 2️⃣ Update LastReadAt for existing users
+  // Step 2️⃣ Update LastReadAt + reset unread count
   await Chat.updateOne(
     { _id: chatId },
     {
       $set: {
         'LastRead.$[elem].LastReadAt': now,
+        'LastRead.$[elem].UnreadCount': 0,
         UpdatedAt: now
       }
     },
@@ -196,7 +227,11 @@ exports.updateLastRead = async (chatId, userIds) => {
     }
   );
 
-  return { success: true, updatedUsers: userIds, updatedAt: now };
+  return {
+    success: true,
+    updatedUsers: userIds,
+    updatedAt: now
+  };
 };
 
 exports.updateLastMessage = async (chatId, messageId) => {

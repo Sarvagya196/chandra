@@ -73,16 +73,6 @@ exports.deleteMessageById = async (messageId) => {
 };
 
 /**
- * Fetch all messages for a specific ChatId, sorted by Timestamp ascending.
- * @param {ObjectId} chatId - The chat whose messages to fetch.
- */
-exports.getMessagesByChatId = async (chatId) => {
-  return await Message.find({ ChatId: chatId })
-    .sort({ Timestamp: 1 })
-    .lean();
-};
-
-/**
  * Fetch paginated messages for a chat before a given timestamp.
  * Populates ParentMessageId so reply info is available.
  */
@@ -104,56 +94,6 @@ exports.getMessagesBefore = async (chatId, before, limit = 20) => {
   }
 };
 
-
-/**
- * Marks all messages in a chat as read by given users with timestamps.
- * @param {ObjectId} chatId
- * @param {Array<ObjectId>|ObjectId} userIds - Single user ID or array of user IDs
- */
-exports.markMessagesAsRead = async (chatId, userIds) => {
-  if (!Array.isArray(userIds)) userIds = [userIds];
-
-  const readAt = new Date();
-
-  // For each userId, update messages that don't already have this user in ReadBy
-  // or update the readAt timestamp if they do
-  const updatePromises = userIds.map(async (userId) => {
-    // Add new read receipt for messages that don't have this user
-    await Message.updateMany(
-      { 
-        ChatId: chatId,
-        'ReadBy.userId': { $ne: userId }
-      },
-      {
-        $push: {
-          ReadBy: {
-            userId: userId,
-            readAt: readAt
-          }
-        }
-      }
-    );
-
-    // Update readAt timestamp for messages where user already exists
-    await Message.updateMany(
-      {
-        ChatId: chatId,
-        'ReadBy.userId': userId
-      },
-      {
-        $set: {
-          'ReadBy.$[elem].readAt': readAt
-        }
-      },
-      {
-        arrayFilters: [{ 'elem.userId': userId }]
-      }
-    );
-  });
-
-  await Promise.all(updatePromises);
-  return { acknowledged: true };
-};
 
 /**
  * Deletes all messages in a specific chat.
