@@ -30,7 +30,7 @@ router.post('/', authenticateToken, controller.createEnquiry);
 router.put('/:id', authenticateToken, controller.updateEnquiry);
 
 // DELETE an enquiry by ID
-router.delete('/:id', controller.deleteEnquiry);
+router.delete('/:id', authenticateToken, controller.deleteEnquiry);
 
 // Upload assets (coral, cad, reference)
 router.post(

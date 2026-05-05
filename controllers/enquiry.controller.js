@@ -120,6 +120,9 @@ exports.getPresignedFileUrl = async (req, res) => {
       const url = await service.getPresignedUrl(key, action);
       res.json({ url });
     } catch (err) {
+      if (err && err.code === 'INVALID_S3_KEY') {
+        return res.status(400).json({ error: 'Invalid S3 key' });
+      }
       console.error('Error generating presigned URL:', err);
       res.status(500).json({ error: 'Failed to generate URL' });
     }

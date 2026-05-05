@@ -1,6 +1,11 @@
 const Enquiry = require('../models/enquiry.model');
 const lodash = require('lodash');
 
+const MAX_SEARCH_LEN = 100;
+function escapeRegex(s) {
+    return String(s).slice(0, MAX_SEARCH_LEN).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
 // Get all enquiries
 exports.getAllEnquiries = async () => {
   return await Enquiry.find();
@@ -93,17 +98,18 @@ exports.search = async (searchTerm, filters, sort, pagination) => {
 
     // --- A. Apply Search Term (if it exists) ---
     if (searchTerm) {
+        const safeTerm = escapeRegex(searchTerm);
         // This $or query searches multiple fields for the same term
         // This is where you define your "searchable fields"
         matchQuery.$or = [
-            { Name: { $regex: searchTerm, $options: 'i' } },
-            { StyleNumber: { $regex: searchTerm, $options: 'i' } },
-            { "Coral.CoralCode": { $regex: searchTerm, $options: 'i' } },
-            { "Cad.CadCode": { $regex: searchTerm, $options: 'i' } },
-            { GatiOrderNumber: { $regex: searchTerm, $options: 'i' } },
-            { Stamping: { $regex: searchTerm, $options: 'i' } },
-            { Remarks: { $regex: searchTerm, $options: 'i' } },
-            { SpecialRemarks: { $regex: searchTerm, $options: 'i' } },
+            { Name: { $regex: safeTerm, $options: 'i' } },
+            { StyleNumber: { $regex: safeTerm, $options: 'i' } },
+            { "Coral.CoralCode": { $regex: safeTerm, $options: 'i' } },
+            { "Cad.CadCode": { $regex: safeTerm, $options: 'i' } },
+            { GatiOrderNumber: { $regex: safeTerm, $options: 'i' } },
+            { Stamping: { $regex: safeTerm, $options: 'i' } },
+            { Remarks: { $regex: safeTerm, $options: 'i' } },
+            { SpecialRemarks: { $regex: safeTerm, $options: 'i' } },
         ];
     }
 

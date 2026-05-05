@@ -40,6 +40,16 @@ app.use(cors({
 app.use(bodyParser.json());
 app.use(express.static('public'));
 
+// Health check (open — used by load balancers / k8s probes)
+app.get('/health', (req, res) => {
+  const dbState = mongoose.connection.readyState; // 1 = connected
+  res.status(dbState === 1 ? 200 : 503).json({
+    status: dbState === 1 ? 'ok' : 'degraded',
+    db: dbState,
+    uptime: process.uptime()
+  });
+});
+
 // API Logger Middleware - Log all API calls
 app.use('/api', apiLogger);
 

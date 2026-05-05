@@ -1,3 +1,5 @@
+const path = require('path');
+const { v4: uuidv4 } = require('uuid');
 const { S3Client, PutObjectCommand, GetObjectCommand } = require('@aws-sdk/client-s3');
 const { getSignedUrl } = require('@aws-sdk/s3-request-presigner');
 require('dotenv').config();
@@ -10,8 +12,30 @@ const s3 = new S3Client({
   },
 });
 
+const MAX_BASENAME_LEN = 128;
+const VALID_KEY_RE = /^[A-Za-z0-9._\-/]+$/;
+
+function sanitizeS3Key(name) {
+  const basename = path.basename(String(name || ''));
+  const cleaned = basename
+    .replace(/[^A-Za-z0-9._-]+/g, '_')
+    .replace(/_+/g, '_')
+    .replace(/^[_.-]+/, '')
+    .slice(0, MAX_BASENAME_LEN);
+  return cleaned || 'file';
+}
+
+function assertValidS3Key(key) {
+  const k = String(key || '');
+  if (!k || k.length > 512 || !VALID_KEY_RE.test(k) || k.split('/').includes('..')) {
+    const err = new Error('Invalid S3 key');
+    err.code = 'INVALID_S3_KEY';
+    throw err;
+  }
+}
+
 async function uploadToS3(file) {
-  const key = `${Date.now()}-${file.originalname}`;
+  const key = `${Date.now()}-${uuidv4()}-${sanitizeS3Key(file.originalname)}`;
 
   const command = new PutObjectCommand({
     Bucket: process.env.AWS_BUCKET_NAME,
@@ -26,6 +50,8 @@ async function uploadToS3(file) {
 }
 
 async function generatePresignedUrl(key, disposition = 'inline') {
+  assertValidS3Key(key);
+
   const command = new GetObjectCommand({
     Bucket: process.env.AWS_BUCKET_NAME,
     Key: key,
@@ -36,4 +62,4 @@ async function generatePresignedUrl(key, disposition = 'inline') {
   return url;
 }
 
-module.exports = { uploadToS3, generatePresignedUrl };
+module.exports = { uploadToS3, generatePresignedUrl, sanitizeS3Key, assertValidS3Key };
