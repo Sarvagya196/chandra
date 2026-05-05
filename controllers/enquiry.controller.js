@@ -45,7 +45,17 @@ exports.getEnquiriesByUserId = async (req, res) => {
 exports.createEnquiry = async (req, res) => {
     const userId = req.user._id;
     try {
-        const enquiry = await service.createEnquiry(req.body, userId);
+        // Multipart: JSON body in `data` field; fall back to req.body for plain JSON callers.
+        let data = req.body;
+        if (typeof req.body?.data === 'string') {
+            try {
+                data = JSON.parse(req.body.data);
+            } catch {
+                return res.status(400).json({ message: "Invalid JSON in 'data' field" });
+            }
+        }
+        const files = req.files?.referenceImages || [];
+        const enquiry = await service.createEnquiry(data, files, userId);
         res.status(201).json(enquiry);
     } catch (error) {
         console.error("Error creating enquiry:", error);

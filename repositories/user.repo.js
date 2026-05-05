@@ -24,6 +24,10 @@ exports.getUsersByRole = async (roleId) => {
   return users.map(u => u._id);
 };
 
+exports.getUsersByRoleFull = async (roleId) => {
+  return await User.find({ role: roleId }).select('_id name skills');
+};
+
 exports.getUsersByClient = async (clientId) => {
   const users = await User.find({ clientId: clientId }).select('_id');
   return users.map(u => u._id);

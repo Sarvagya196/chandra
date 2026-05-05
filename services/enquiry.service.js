@@ -10,6 +10,30 @@ const codelistsService = require('../services/codelists.service');
 const notificationService = require('../services/notifications.service');
 const reportsService = require('../services/reports.service');
 
+// Best-effort: describe + embed each newly-uploaded image and store in DesignEmbedding.
+// Failures are logged and swallowed — never break the upload path.
+async function indexUploadedAssets({ enquiryId, type, version, uploads }) {
+    const { describeAndEmbedImage } = require('./imageDescribe.service');
+    const { indexDesign } = require('./designSimilarity.service');
+    for (const u of uploads) {
+        try {
+            const result = await describeAndEmbedImage({ s3Key: u.key, mimetype: u.mimetype });
+            if (!result) continue;
+            await indexDesign({
+                enquiryId,
+                type,
+                version,
+                key: u.key,
+                description: result.description,
+                tags: result.tags,
+                embedding: result.embedding,
+            });
+        } catch (err) {
+            console.error(`[indexUploadedAssets] failed for ${type} key ${u.key}:`, err);
+        }
+    }
+}
+
 // Get all enquiries
 exports.getEnquiries = async () => {
     return await repo.getAllEnquiries();
@@ -30,8 +54,25 @@ exports.getEnquiriesByUserId = async (userId) => {
     return await repo.getEnquiriesByUserId(userId);
 };
 
-exports.createEnquiry = async (data, userId) => {
+exports.createEnquiry = async (data, files = [], userId) => {
     const { AssignedTo, Status, ...rest } = data;
+
+    // Upload reference images to S3 if provided
+    const ReferenceImages = [];
+    for (const file of files) {
+        try {
+            const key = await uploadToS3(file);
+            ReferenceImages.push({
+                Id: uuidv4(),
+                Key: key,
+                Description: file.originalname,
+                MimeType: file.mimetype,
+            });
+        } catch (err) {
+            console.error('[createEnquiry] reference image upload failed:', file?.originalname, err);
+        }
+    }
+    if (ReferenceImages.length > 0) rest.ReferenceImages = ReferenceImages;
 
     const StatusHistory = [
         {
@@ -51,7 +92,7 @@ exports.createEnquiry = async (data, userId) => {
     }
 
     const enquiryData = {
-        ...rest, // Only fields allowed in the schema (e.g., Name, Quantity, etc.)
+        ...rest,
         StatusHistory
     };
 
@@ -97,6 +138,15 @@ exports.createEnquiry = async (data, userId) => {
     } catch (err) {
         console.error('❌ Error sending enquiry creation notifications:', err);
     }
+
+    // Fire-and-forget: image embedding, auto-assign designer, similar-design search.
+    // Best-effort — failures are logged inside the hook and never block the response.
+    queueMicrotask(() => {
+        const { postEnquiryCreateHook } = require('./enquiryAssignment.service');
+        postEnquiryCreateHook(enquiry).catch(err =>
+            console.error('postEnquiryCreateHook failed:', err)
+        );
+    });
 
     return enquiry._id;
 };
@@ -594,6 +644,7 @@ async function handleCoralUpload(enquiry, files, version, coralCode, userId) {
 
     
 
+    const newCoralUploads = [];
     if (files.images) {
         for (const file of files.images) {
             const key = await uploadToS3(file);
@@ -602,6 +653,7 @@ async function handleCoralUpload(enquiry, files, version, coralCode, userId) {
                 Key: key,
                 Description: file.originalname
             });
+            newCoralUploads.push({ key, mimetype: file.mimetype });
         }
     }
 
@@ -690,6 +742,14 @@ async function handleCoralUpload(enquiry, files, version, coralCode, userId) {
     enquiry.StatusHistory.push(statusEntry);
 
     await repo.updateEnquiry(enquiry._id, enquiry);
+
+    // Fire-and-forget: index newly-uploaded coral images for similarity search.
+    if (newCoralUploads.length) {
+        queueMicrotask(() => indexUploadedAssets({
+            enquiryId: enquiry._id, type: 'coral', version: assetVersion, uploads: newCoralUploads,
+        }));
+    }
+
     return { _id: enquiry._id };
 }
 
@@ -708,6 +768,7 @@ async function handleCadUpload(enquiry, files, version, cadCode, userId) {
         };
     }
 
+    const newCadUploads = [];
     if (files.images) {
         for (const file of files.images) {
             const key = await uploadToS3(file);
@@ -716,6 +777,7 @@ async function handleCadUpload(enquiry, files, version, cadCode, userId) {
                 Key: key,
                 Description: file.originalname
             });
+            newCadUploads.push({ key, mimetype: file.mimetype });
         }
     }
 
@@ -802,6 +864,14 @@ async function handleCadUpload(enquiry, files, version, cadCode, userId) {
     enquiry.StatusHistory.push(statusEntry);
 
     await repo.updateEnquiry(enquiry._id, enquiry);
+
+    // Fire-and-forget: index newly-uploaded cad images for similarity search.
+    if (newCadUploads.length) {
+        queueMicrotask(() => indexUploadedAssets({
+            enquiryId: enquiry._id, type: 'cad', version: assetVersion, uploads: newCadUploads,
+        }));
+    }
+
     return { _id: enquiry._id };
 }
 

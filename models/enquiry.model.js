@@ -78,7 +78,13 @@ const enquirySchema = new mongoose.Schema({
     ReferenceImages: [{
         Id: String,
         Key: String,
-        Description: String
+        Description: String,
+        MimeType: String
+    }],
+    SimilarDesigns: [{
+        EnquiryId: { type: mongoose.Schema.Types.ObjectId, ref: 'Enquiry' },
+        Key: String,
+        Score: Number
     }],
     Coral: [{
         Version: String,

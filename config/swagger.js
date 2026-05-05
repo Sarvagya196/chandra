@@ -151,6 +151,30 @@ const swaggerSpec = {
                                     },
                                 },
                             },
+                            ReferenceImages: {
+                                type: 'array',
+                                items: {
+                                    type: 'object',
+                                    properties: {
+                                        Id:          { type: 'string' },
+                                        Key:         { type: 'string' },
+                                        Description: { type: 'string' },
+                                        MimeType:    { type: 'string' },
+                                    },
+                                },
+                            },
+                            SimilarDesigns: {
+                                type: 'array',
+                                description: 'Top similar past designs (populated asynchronously after create).',
+                                items: {
+                                    type: 'object',
+                                    properties: {
+                                        EnquiryId: { type: 'string' },
+                                        Key:       { type: 'string' },
+                                        Score:     { type: 'number' },
+                                    },
+                                },
+                            },
                         },
                     },
                 ],
@@ -722,15 +746,35 @@ const swaggerSpec = {
         '/api/enquiries': {
             post: {
                 tags: ['Enquiries'],
-                summary: 'Create a new enquiry',
+                summary: 'Create a new enquiry (multipart, with reference images)',
+                description: 'Send the enquiry payload as a stringified JSON in the `data` field. Attach up to 10 reference files (images, videos, PDFs — anything) under the `referenceImages` field, each up to 50 MB.\n\nAfter creation, an async hook describes/embeds the reference images, auto-assigns a Coral or Cad designer based on user skills, and populates `SimilarDesigns` on the enquiry.',
                 requestBody: {
                     required: true,
                     content: {
+                        'multipart/form-data': {
+                            schema: {
+                                type: 'object',
+                                required: ['data'],
+                                properties: {
+                                    data: {
+                                        type: 'string',
+                                        description: 'Stringified JSON of EnquiryCreateRequest',
+                                        example: '{"Name":"Diamond ring","Status":"Coral","ClientId":"66a..."}',
+                                    },
+                                    referenceImages: {
+                                        type: 'array',
+                                        items: { type: 'string', format: 'binary' },
+                                        description: 'Reference files (images, videos, etc.) up to 10 files, max 50 MB each',
+                                    },
+                                },
+                            },
+                        },
                         'application/json': { schema: { $ref: '#/components/schemas/EnquiryCreateRequest' } },
                     },
                 },
                 responses: {
                     201: { description: 'Enquiry ID of the created enquiry' },
+                    400: { description: "Invalid JSON in 'data' field" },
                     500: { description: 'Server error' },
                 },
             },
