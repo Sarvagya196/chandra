@@ -1,8 +1,25 @@
+const bcrypt = require('bcrypt');
 const repo = require('../repositories/user.repo');
 
 // Get all users
 exports.getUsers = async () => {
     return await repo.getAllUsers();
+};
+
+exports.createUser = async (data) => {
+    const { name, email, phone, role, password, clientId, skills } = data;
+    const hashedPassword = await bcrypt.hash(password, 10);
+    return await repo.createUser({ name, email, phone, role, password: hashedPassword, clientId, skills });
+};
+
+const UPDATABLE_FIELDS = ['name', 'email', 'phone', 'role', 'clientId', 'skills'];
+
+exports.updateUser = async (id, data) => {
+    const update = {};
+    for (const field of UPDATABLE_FIELDS) {
+        if (data[field] !== undefined) update[field] = data[field];
+    }
+    return await repo.updateUser(id, update);
 };
 
 // Get a user by ID

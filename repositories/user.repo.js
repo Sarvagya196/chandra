@@ -11,6 +11,14 @@ exports.getUser = async (id) => {
   return await User.findById(id);
 };
 
+exports.createUser = async (data) => {
+  return await User.create(data);
+};
+
+exports.updateUser = async (id, data) => {
+  return await User.findByIdAndUpdate(id, { $set: data }, { new: true, runValidators: true });
+};
+
 exports.getUsersByRole = async (roleId) => {
   const users = await User.find({ role: roleId }).select('_id');
   return users.map(u => u._id);

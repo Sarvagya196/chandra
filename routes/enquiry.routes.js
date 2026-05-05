@@ -1,11 +1,15 @@
 const express = require('express');
 const router = express.Router();
 const controller = require('../controllers/enquiry.controller');
+const parseController = require('../controllers/enquiryParse.controller');
 const authenticateToken = require('../middleware/authenticateToken');
 const dynamicUpload = require('../middleware/dynamicUpload');
 
 // GET all enquiries
 // router.get('/', authenticateToken, controller.getEnquiries);
+
+// AI parse — must be before /:id routes
+router.post('/parse', authenticateToken, parseController.parseEnquiry);
 
 router.get('/export-pdf',
     authenticateToken,

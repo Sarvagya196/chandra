@@ -13,6 +13,9 @@ const apiLogger = require('./middleware/apiLogger');
 const { createStatusCodelist } = require('./utils/populateCodelists');
 const { createStoneTypesCodelist } = require('./utils/populateCodelists');
 
+const swaggerUi = require('swagger-ui-express');
+const swaggerSpec = require('./config/swagger');
+
 const app = express();
 const server = http.createServer(app);
 
@@ -39,6 +42,9 @@ app.use(cors({
 
 app.use(bodyParser.json());
 app.use(express.static('public'));
+
+// Swagger UI (open — no auth required)
+app.use('/api-docs', swaggerUi.serve, swaggerUi.setup(swaggerSpec));
 
 // Health check (open — used by load balancers / k8s probes)
 app.get('/health', (req, res) => {

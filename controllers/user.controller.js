@@ -7,7 +7,8 @@ exports.getUsers = async (req, res) => {
       const filteredUsers = users.map(user => ({
         Id: user._id,
         Name: user.name,
-        Role: user.role
+        Role: user.role,
+        Skills: user.skills
       }));
   
       res.json(filteredUsers);
@@ -22,6 +23,37 @@ exports.getUserById = async (req, res) => {
         if (!user) return res.status(404).json({ message: 'User not found' });
         res.json(user);
     } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+};
+
+exports.createUser = async (req, res) => {
+    try {
+        const { name, email, phone, role, password, clientId, skills } = req.body;
+        if (!name || !email || !role || !password) {
+            return res.status(400).json({ message: 'name, email, role and password are required' });
+        }
+        const user = await service.createUser({ name, email, phone, role, password, clientId, skills });
+        res.status(201).json({ Id: user._id, Name: user.name, Role: user.role, Skills: user.skills });
+    } catch (err) {
+        if (err.code === 11000) {
+            return res.status(409).json({ message: 'Email or phone already in use' });
+        }
+        console.error('Error creating user:', err);
+        res.status(500).json({ error: err.message });
+    }
+};
+
+exports.updateUser = async (req, res) => {
+    try {
+        const user = await service.updateUser(req.params.id, req.body);
+        if (!user) return res.status(404).json({ message: 'User not found' });
+        res.json({ Id: user._id, Name: user.name, Role: user.role, Skills: user.skills });
+    } catch (err) {
+        if (err.code === 11000) {
+            return res.status(409).json({ message: 'Email or phone already in use' });
+        }
+        console.error('Error updating user:', err);
         res.status(500).json({ error: err.message });
     }
 };
