@@ -5,9 +5,15 @@ const swaggerSpec = {
         version: '1.0.0',
         description: 'Backend API for the Chandra jewellery workflow management system.',
     },
-    servers: [
-        { url: `http://localhost:${process.env.PORT || 5000}`, description: 'Local' },
-    ],
+    servers: process.env.NODE_ENV === 'production'
+        ? [
+            { url: 'https://workflowapi-quhn.onrender.com', description: 'Production' },
+            { url: `http://localhost:${process.env.PORT || 3000}`, description: 'Local' },
+          ]
+        : [
+            { url: `http://localhost:${process.env.PORT || 3000}`, description: 'Local' },
+            { url: 'https://workflowapi-quhn.onrender.com', description: 'Production' },
+          ],
     components: {
         securitySchemes: {
             bearerAuth: {
