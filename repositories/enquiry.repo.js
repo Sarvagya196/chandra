@@ -23,28 +23,37 @@ exports.getEnquiriesByClientId = async (clientId) => {
 
 // Get enquiries by user id (from Participants)
 exports.getEnquiriesByUserId = async (userId) => {
-  try {
-    const enquiries = await Enquiry.aggregate([
-      {
-        $addFields: {
-          lastStatus: { $arrayElemAt: ["$StatusHistory", -1] }
+    return Enquiry.aggregate([
+        { $addFields: { lastStatus: { $arrayElemAt: ['$StatusHistory', -1] } } },
+        { $match: { 'lastStatus.AssignedTo': userId } },
+        { $project: { lastStatus: 0 } }
+    ]);
+};
+
+const ACTIVE_STATUSES = ['Coral', 'Cad', 'Approved Cad'];
+
+exports.countActiveEnquiriesByDesigners = async (designerIds) => {
+    const results = await Enquiry.aggregate([
+        {
+            $addFields: {
+                lastStatus: { $arrayElemAt: ['$StatusHistory', -1] }
+            }
+        },
+        {
+            $match: {
+                'lastStatus.AssignedTo': { $in: designerIds.map(String) },
+                'lastStatus.Status': { $in: ACTIVE_STATUSES }
+            }
+        },
+        {
+            $group: {
+                _id: '$lastStatus.AssignedTo',
+                count: { $sum: 1 }
+            }
         }
-      },
-      {
-        $match: {
-          "lastStatus.AssignedTo": userId
-        }
-      },
-      {
-        $project: { lastStatus: 0 }
-      }
     ]);
 
-    res.json(enquiries);
-  } catch (error) {
-    console.error(error);
-    res.status(500).json({ message: "Error fetching enquiries" });
-  }
+    return Object.fromEntries(results.map(r => [r._id, r.count]));
 };
 
 // Create a new enquiry

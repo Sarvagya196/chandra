@@ -23,14 +23,20 @@ async function resolveRoleId(roleCode) {
  * Pick the best designer using a single LLM ranking call.
  * Returns the chosen userId (string) or null if no candidate could be picked.
  */
-async function rankDesigner({ designers, referenceTags, referenceDescription }) {
+async function rankDesigner({ designers, referenceTags, referenceDescription, enquiryMeta, workloadMap }) {
     if (!designers || designers.length === 0) return null;
     if (designers.length === 1) return String(designers[0]._id);
 
     const payload = {
-        designers: designers.map(d => ({ id: String(d._id), name: d.name, skills: d.skills || '' })),
+        designers: designers.map(d => ({
+            id: String(d._id),
+            name: d.name,
+            skills: d.skills || '',
+            activeEnquiries: workloadMap?.[String(d._id)] ?? 0,
+        })),
         referenceTags,
         referenceDescription,
+        enquiryMeta,
     };
 
     const res = await openai.chat.completions.create({
@@ -39,9 +45,12 @@ async function rankDesigner({ designers, referenceTags, referenceDescription }) 
         messages: [
             {
                 role: 'system',
-                content: `You are matching a jewellery enquiry to the best designer based on their skills.
+                content: `You are matching a jewellery enquiry to the best designer.
+Consider both skill match AND current workload (activeEnquiries).
+Prefer a designer with strong matching skills and a lower workload.
+If skills are equally matched, prefer the designer with fewer active enquiries.
 Return ONLY a JSON object: { "chosenId": "<designer id>", "reason": "<short reason>" }.
-If skills are sparse or absent, pick the first designer.`,
+If skills are sparse or absent, pick the designer with the fewest active enquiries.`,
             },
             { role: 'user', content: JSON.stringify(payload) },
         ],
@@ -61,7 +70,7 @@ If skills are sparse or absent, pick the first designer.`,
  * Auto-assign a Coral or Cad designer based on the reference image descriptions.
  * Best-effort — caller should not let exceptions propagate.
  */
-exports.autoAssignDesigner = async ({ enquiry, referenceDescription, referenceTags }) => {
+exports.autoAssignDesigner = async ({ enquiry, referenceDescription, referenceTags, detectedGroup }) => {
     const currentStatus = enquiry.StatusHistory?.at(-1)?.Status;
     const roleCode = STATUS_TO_ROLE_CODE[currentStatus];
     if (!roleCode) return null;
@@ -69,8 +78,26 @@ exports.autoAssignDesigner = async ({ enquiry, referenceDescription, referenceTa
     const roleId = await resolveRoleId(roleCode);
     if (!roleId) return null;
 
-    const designers = await userService.getUsersByRoleFull(roleId);
-    const chosenId = await rankDesigner({ designers, referenceTags, referenceDescription });
+    const allDesigners = await userService.getUsersByRoleFull(roleId);
+    const groupFiltered = detectedGroup
+        ? allDesigners.filter(d => d.group === detectedGroup)
+        : [];
+    const designers = groupFiltered.length > 0 ? groupFiltered : allDesigners;
+
+    const enquiryMeta = {
+        category: enquiry.Category,
+        stoneType: enquiry.StoneType,
+        metalColor: enquiry.Metal?.Color,
+        metalQuality: enquiry.Metal?.Quality,
+        remarks: enquiry.Remarks,
+        specialRemarks: enquiry.SpecialRemarks,
+        priority: enquiry.Priority,
+    };
+
+    const designerIds = designers.map(d => String(d._id));
+    const workloadMap = await repo.countActiveEnquiriesByDesigners(designerIds);
+
+    const chosenId = await rankDesigner({ designers, referenceTags, referenceDescription, enquiryMeta, workloadMap });
     if (!chosenId) return null;
 
     const statusEntry = {
@@ -138,10 +165,32 @@ exports.postEnquiryCreateHook = async (enquiry) => {
     try {
         const combinedDescription = enriched.map(e => e.description).join('\n\n');
         const combinedTags = [...new Set(enriched.flatMap(e => e.tags))];
+
+        const VALID_GROUPS = ['Bridal', 'Hip-hop', 'Cuban'];
+        const GROUP_KEYWORDS = {
+            'Bridal':  ['bridal', 'engagement', 'wedding', 'solitaire', 'eternity', 'romantic', 'floral'],
+            'Hip-hop': ['hip hop', 'hip-hop', 'hiphop', 'iced', 'bling', 'statement', 'bold'],
+            'Cuban':   ['cuban', 'link', 'chain', 'thick', 'street'],
+        };
+        const enquiryText = [enquiry.Category, enquiry.Remarks, enquiry.SpecialRemarks]
+            .filter(Boolean).join(' ').toLowerCase();
+
+        const groupVotes = enriched.map(e => e.group).filter(g => VALID_GROUPS.includes(g));
+        for (const [group, keywords] of Object.entries(GROUP_KEYWORDS)) {
+            if (keywords.some(kw => enquiryText.includes(kw))) groupVotes.push(group);
+        }
+
+        const detectedGroup = groupVotes.length > 0
+            ? groupVotes.sort((a, b) =>
+                groupVotes.filter(v => v === b).length - groupVotes.filter(v => v === a).length
+              )[0]
+            : null;
+
         await exports.autoAssignDesigner({
             enquiry,
             referenceDescription: combinedDescription,
             referenceTags: combinedTags,
+            detectedGroup,
         });
     } catch (err) {
         console.error('[post-create] autoAssignDesigner failed:', err);

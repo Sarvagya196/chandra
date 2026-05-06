@@ -21,7 +21,8 @@ const DiamondSchema = new mongoose.Schema({
     Name: { type: String, required: true },
     ImageUrl: { type: String },
     PriorityOrder: { type: Number },
-    Pricing: PricingSchema
+    Pricing: PricingSchema,
+    PricingMessageFormat: { type: String }
   });
   
   module.exports = mongoose.model('Client', ClientSchema);

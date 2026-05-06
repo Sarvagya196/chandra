@@ -1,6 +1,9 @@
+const OpenAI = require('openai');
 const repo = require('../repositories/enquiry.repo');
 const userService = require("../services/user.service");
 const clientService = require("../services/client.service");
+
+const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
 const metalPricesService = require("../services/metalPrices.service");
 const chatService = require('./chat.service');
 const { uploadToS3, generatePresignedUrl } = require('../utils/s3');
@@ -9,6 +12,24 @@ const xlsx = require('xlsx');
 const codelistsService = require('../services/codelists.service');
 const notificationService = require('../services/notifications.service');
 const reportsService = require('../services/reports.service');
+
+async function generateClientPricingMessage(pricingEntry, pricingMessageFormat) {
+    const res = await openai.chat.completions.create({
+        model: process.env.OPENAI_RANK_MODEL || 'gpt-4o-mini',
+        messages: [
+            {
+                role: 'system',
+                content: `You are generating a pricing message for a jewellery client.
+Follow the format instructions exactly. Return only the final message text — no JSON, no commentary.`,
+            },
+            {
+                role: 'user',
+                content: `Format instructions: ${pricingMessageFormat}\n\nPricing:\n${JSON.stringify(pricingEntry, null, 2)}`,
+            },
+        ],
+    });
+    return res.choices[0].message.content?.trim() || null;
+}
 
 // Best-effort: describe + embed each newly-uploaded image and store in DesignEmbedding.
 // Failures are logged and swallowed — never break the upload path.
@@ -692,6 +713,7 @@ async function handleCoralUpload(enquiry, files, version, coralCode, userId) {
                 Labour: pricing.Client.Labour,
                 ExtraCharges: pricing.Client.ExtraCharges,
                 Duties: pricing.Client.Duties,
+                ClientPricingMessage: pricing.ClientPricingMessage || null,
                 Metal: {
                     Weight: pricing.Metal.Weight,
                     Quality: pricing.Metal.Quality,
@@ -816,6 +838,7 @@ async function handleCadUpload(enquiry, files, version, cadCode, userId) {
                 Labour: pricing.Client.Labour,
                 ExtraCharges: pricing.Client.ExtraCharges,
                 Duties: pricing.Client.Duties,
+                ClientPricingMessage: pricing.ClientPricingMessage || null,
                 Metal: {
                     Weight: pricing.Metal.Weight,
                     Quality: pricing.Metal.Quality,
@@ -1102,6 +1125,7 @@ exports.calculatePricing = async (pricingDetails, clientId) => {
         labour = client?.Pricing?.Labour || 0;
         extraCharges = client?.Pricing?.ExtraCharges || 0;
         duties = client?.Pricing?.Duties || 0;
+        var clientPricingMessageFormat = client?.PricingMessageFormat || null;
 
         // Calculate Diamonds Price
         stones = stones.map(stone => {
@@ -1155,7 +1179,7 @@ exports.calculatePricing = async (pricingDetails, clientId) => {
 
     const totalPrice = ((metalPrice + diamondsPrice) * quantity) + extraCharges + dutiesAmount;
 
-    return {
+    const result = {
         MetalPrice: parseFloat(metalPrice?.toFixed(3)),
         DiamondsPrice: diamondPriceNotFound ? 0 : parseFloat(diamondsPrice?.toFixed(3)),
         TotalPrice: parseFloat(totalPrice?.toFixed(3)),
@@ -1186,6 +1210,16 @@ exports.calculatePricing = async (pricingDetails, clientId) => {
             CtWeight: stone.CtWeight
         }))
     };
+
+    if (clientPricingMessageFormat) {
+        try {
+            result.ClientPricingMessage = await generateClientPricingMessage(result, clientPricingMessageFormat);
+        } catch (err) {
+            console.error('[pricing-message] generation failed:', err);
+        }
+    }
+
+    return result;
 
 };
 

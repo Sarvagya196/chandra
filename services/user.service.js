@@ -7,12 +7,12 @@ exports.getUsers = async () => {
 };
 
 exports.createUser = async (data) => {
-    const { name, email, phone, role, password, clientId, skills } = data;
+    const { name, email, phone, role, password, clientId, skills, group } = data;
     const hashedPassword = await bcrypt.hash(password, 10);
-    return await repo.createUser({ name, email, phone, role, password: hashedPassword, clientId, skills });
+    return await repo.createUser({ name, email, phone, role, password: hashedPassword, clientId, skills, group });
 };
 
-const UPDATABLE_FIELDS = ['name', 'email', 'phone', 'role', 'clientId', 'skills'];
+const UPDATABLE_FIELDS = ['name', 'email', 'phone', 'role', 'clientId', 'skills', 'group'];
 
 exports.updateUser = async (id, data) => {
     const update = {};
