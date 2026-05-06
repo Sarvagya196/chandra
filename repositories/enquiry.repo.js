@@ -1,6 +1,11 @@
 const Enquiry = require('../models/enquiry.model');
 const lodash = require('lodash');
 
+const MAX_SEARCH_LEN = 100;
+function escapeRegex(s) {
+    return String(s).slice(0, MAX_SEARCH_LEN).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
 // Get all enquiries
 exports.getAllEnquiries = async () => {
   return await Enquiry.find();
@@ -18,28 +23,37 @@ exports.getEnquiriesByClientId = async (clientId) => {
 
 // Get enquiries by user id (from Participants)
 exports.getEnquiriesByUserId = async (userId) => {
-  try {
-    const enquiries = await Enquiry.aggregate([
-      {
-        $addFields: {
-          lastStatus: { $arrayElemAt: ["$StatusHistory", -1] }
+    return Enquiry.aggregate([
+        { $addFields: { lastStatus: { $arrayElemAt: ['$StatusHistory', -1] } } },
+        { $match: { 'lastStatus.AssignedTo': userId } },
+        { $project: { lastStatus: 0 } }
+    ]);
+};
+
+const ACTIVE_STATUSES = ['Coral', 'Cad', 'Approved Cad'];
+
+exports.countActiveEnquiriesByDesigners = async (designerIds) => {
+    const results = await Enquiry.aggregate([
+        {
+            $addFields: {
+                lastStatus: { $arrayElemAt: ['$StatusHistory', -1] }
+            }
+        },
+        {
+            $match: {
+                'lastStatus.AssignedTo': { $in: designerIds.map(String) },
+                'lastStatus.Status': { $in: ACTIVE_STATUSES }
+            }
+        },
+        {
+            $group: {
+                _id: '$lastStatus.AssignedTo',
+                count: { $sum: 1 }
+            }
         }
-      },
-      {
-        $match: {
-          "lastStatus.AssignedTo": userId
-        }
-      },
-      {
-        $project: { lastStatus: 0 }
-      }
     ]);
 
-    res.json(enquiries);
-  } catch (error) {
-    console.error(error);
-    res.status(500).json({ message: "Error fetching enquiries" });
-  }
+    return Object.fromEntries(results.map(r => [r._id, r.count]));
 };
 
 // Create a new enquiry
@@ -93,17 +107,18 @@ exports.search = async (searchTerm, filters, sort, pagination) => {
 
     // --- A. Apply Search Term (if it exists) ---
     if (searchTerm) {
+        const safeTerm = escapeRegex(searchTerm);
         // This $or query searches multiple fields for the same term
         // This is where you define your "searchable fields"
         matchQuery.$or = [
-            { Name: { $regex: searchTerm, $options: 'i' } },
-            { StyleNumber: { $regex: searchTerm, $options: 'i' } },
-            { "Coral.CoralCode": { $regex: searchTerm, $options: 'i' } },
-            { "Cad.CadCode": { $regex: searchTerm, $options: 'i' } },
-            { GatiOrderNumber: { $regex: searchTerm, $options: 'i' } },
-            { Stamping: { $regex: searchTerm, $options: 'i' } },
-            { Remarks: { $regex: searchTerm, $options: 'i' } },
-            { SpecialRemarks: { $regex: searchTerm, $options: 'i' } },
+            { Name: { $regex: safeTerm, $options: 'i' } },
+            { StyleNumber: { $regex: safeTerm, $options: 'i' } },
+            { "Coral.CoralCode": { $regex: safeTerm, $options: 'i' } },
+            { "Cad.CadCode": { $regex: safeTerm, $options: 'i' } },
+            { GatiOrderNumber: { $regex: safeTerm, $options: 'i' } },
+            { Stamping: { $regex: safeTerm, $options: 'i' } },
+            { Remarks: { $regex: safeTerm, $options: 'i' } },
+            { SpecialRemarks: { $regex: safeTerm, $options: 'i' } },
         ];
     }
 

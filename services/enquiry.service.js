@@ -1,6 +1,9 @@
+const OpenAI = require('openai');
 const repo = require('../repositories/enquiry.repo');
 const userService = require("../services/user.service");
 const clientService = require("../services/client.service");
+
+const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
 const metalPricesService = require("../services/metalPrices.service");
 const chatService = require('./chat.service');
 const { uploadToS3, generatePresignedUrl } = require('../utils/s3');
@@ -9,6 +12,48 @@ const xlsx = require('xlsx');
 const codelistsService = require('../services/codelists.service');
 const notificationService = require('../services/notifications.service');
 const reportsService = require('../services/reports.service');
+
+async function generateClientPricingMessage(pricingEntry, pricingMessageFormat) {
+    const res = await openai.chat.completions.create({
+        model: process.env.OPENAI_RANK_MODEL || 'gpt-4o-mini',
+        messages: [
+            {
+                role: 'system',
+                content: `You are generating a pricing message for a jewellery client.
+Follow the format instructions exactly. Return only the final message text — no JSON, no commentary.`,
+            },
+            {
+                role: 'user',
+                content: `Format instructions: ${pricingMessageFormat}\n\nPricing:\n${JSON.stringify(pricingEntry, null, 2)}`,
+            },
+        ],
+    });
+    return res.choices[0].message.content?.trim() || null;
+}
+
+// Best-effort: describe + embed each newly-uploaded image and store in DesignEmbedding.
+// Failures are logged and swallowed — never break the upload path.
+async function indexUploadedAssets({ enquiryId, type, version, uploads }) {
+    const { describeAndEmbedImage } = require('./imageDescribe.service');
+    const { indexDesign } = require('./designSimilarity.service');
+    for (const u of uploads) {
+        try {
+            const result = await describeAndEmbedImage({ s3Key: u.key, mimetype: u.mimetype });
+            if (!result) continue;
+            await indexDesign({
+                enquiryId,
+                type,
+                version,
+                key: u.key,
+                description: result.description,
+                tags: result.tags,
+                embedding: result.embedding,
+            });
+        } catch (err) {
+            console.error(`[indexUploadedAssets] failed for ${type} key ${u.key}:`, err);
+        }
+    }
+}
 
 // Get all enquiries
 exports.getEnquiries = async () => {
@@ -30,8 +75,25 @@ exports.getEnquiriesByUserId = async (userId) => {
     return await repo.getEnquiriesByUserId(userId);
 };
 
-exports.createEnquiry = async (data, userId) => {
+exports.createEnquiry = async (data, files = [], userId) => {
     const { AssignedTo, Status, ...rest } = data;
+
+    // Upload reference images to S3 if provided
+    const ReferenceImages = [];
+    for (const file of files) {
+        try {
+            const key = await uploadToS3(file);
+            ReferenceImages.push({
+                Id: uuidv4(),
+                Key: key,
+                Description: file.originalname,
+                MimeType: file.mimetype,
+            });
+        } catch (err) {
+            console.error('[createEnquiry] reference image upload failed:', file?.originalname, err);
+        }
+    }
+    if (ReferenceImages.length > 0) rest.ReferenceImages = ReferenceImages;
 
     const StatusHistory = [
         {
@@ -51,7 +113,7 @@ exports.createEnquiry = async (data, userId) => {
     }
 
     const enquiryData = {
-        ...rest, // Only fields allowed in the schema (e.g., Name, Quantity, etc.)
+        ...rest,
         StatusHistory
     };
 
@@ -97,6 +159,15 @@ exports.createEnquiry = async (data, userId) => {
     } catch (err) {
         console.error('❌ Error sending enquiry creation notifications:', err);
     }
+
+    // Fire-and-forget: image embedding, auto-assign designer, similar-design search.
+    // Best-effort — failures are logged inside the hook and never block the response.
+    queueMicrotask(() => {
+        const { postEnquiryCreateHook } = require('./enquiryAssignment.service');
+        postEnquiryCreateHook(enquiry).catch(err =>
+            console.error('postEnquiryCreateHook failed:', err)
+        );
+    });
 
     return enquiry._id;
 };
@@ -594,6 +665,7 @@ async function handleCoralUpload(enquiry, files, version, coralCode, userId) {
 
     
 
+    const newCoralUploads = [];
     if (files.images) {
         for (const file of files.images) {
             const key = await uploadToS3(file);
@@ -602,6 +674,7 @@ async function handleCoralUpload(enquiry, files, version, coralCode, userId) {
                 Key: key,
                 Description: file.originalname
             });
+            newCoralUploads.push({ key, mimetype: file.mimetype });
         }
     }
 
@@ -640,6 +713,7 @@ async function handleCoralUpload(enquiry, files, version, coralCode, userId) {
                 Labour: pricing.Client.Labour,
                 ExtraCharges: pricing.Client.ExtraCharges,
                 Duties: pricing.Client.Duties,
+                ClientPricingMessage: pricing.ClientPricingMessage || null,
                 Metal: {
                     Weight: pricing.Metal.Weight,
                     Quality: pricing.Metal.Quality,
@@ -690,6 +764,14 @@ async function handleCoralUpload(enquiry, files, version, coralCode, userId) {
     enquiry.StatusHistory.push(statusEntry);
 
     await repo.updateEnquiry(enquiry._id, enquiry);
+
+    // Fire-and-forget: index newly-uploaded coral images for similarity search.
+    if (newCoralUploads.length) {
+        queueMicrotask(() => indexUploadedAssets({
+            enquiryId: enquiry._id, type: 'coral', version: assetVersion, uploads: newCoralUploads,
+        }));
+    }
+
     return { _id: enquiry._id };
 }
 
@@ -708,6 +790,7 @@ async function handleCadUpload(enquiry, files, version, cadCode, userId) {
         };
     }
 
+    const newCadUploads = [];
     if (files.images) {
         for (const file of files.images) {
             const key = await uploadToS3(file);
@@ -716,6 +799,7 @@ async function handleCadUpload(enquiry, files, version, cadCode, userId) {
                 Key: key,
                 Description: file.originalname
             });
+            newCadUploads.push({ key, mimetype: file.mimetype });
         }
     }
 
@@ -754,6 +838,7 @@ async function handleCadUpload(enquiry, files, version, cadCode, userId) {
                 Labour: pricing.Client.Labour,
                 ExtraCharges: pricing.Client.ExtraCharges,
                 Duties: pricing.Client.Duties,
+                ClientPricingMessage: pricing.ClientPricingMessage || null,
                 Metal: {
                     Weight: pricing.Metal.Weight,
                     Quality: pricing.Metal.Quality,
@@ -802,6 +887,14 @@ async function handleCadUpload(enquiry, files, version, cadCode, userId) {
     enquiry.StatusHistory.push(statusEntry);
 
     await repo.updateEnquiry(enquiry._id, enquiry);
+
+    // Fire-and-forget: index newly-uploaded cad images for similarity search.
+    if (newCadUploads.length) {
+        queueMicrotask(() => indexUploadedAssets({
+            enquiryId: enquiry._id, type: 'cad', version: assetVersion, uploads: newCadUploads,
+        }));
+    }
+
     return { _id: enquiry._id };
 }
 
@@ -1032,6 +1125,7 @@ exports.calculatePricing = async (pricingDetails, clientId) => {
         labour = client?.Pricing?.Labour || 0;
         extraCharges = client?.Pricing?.ExtraCharges || 0;
         duties = client?.Pricing?.Duties || 0;
+        var clientPricingMessageFormat = client?.PricingMessageFormat || null;
 
         // Calculate Diamonds Price
         stones = stones.map(stone => {
@@ -1085,7 +1179,7 @@ exports.calculatePricing = async (pricingDetails, clientId) => {
 
     const totalPrice = ((metalPrice + diamondsPrice) * quantity) + extraCharges + dutiesAmount;
 
-    return {
+    const result = {
         MetalPrice: parseFloat(metalPrice?.toFixed(3)),
         DiamondsPrice: diamondPriceNotFound ? 0 : parseFloat(diamondsPrice?.toFixed(3)),
         TotalPrice: parseFloat(totalPrice?.toFixed(3)),
@@ -1116,6 +1210,16 @@ exports.calculatePricing = async (pricingDetails, clientId) => {
             CtWeight: stone.CtWeight
         }))
     };
+
+    if (clientPricingMessageFormat) {
+        try {
+            result.ClientPricingMessage = await generateClientPricingMessage(result, clientPricingMessageFormat);
+        } catch (err) {
+            console.error('[pricing-message] generation failed:', err);
+        }
+    }
+
+    return result;
 
 };
 

@@ -1,20 +1,21 @@
 const express = require('express');
 const router = express.Router();
 const controller = require('../controllers/metalPrices.controller');
+const authenticateToken = require('../middleware/authenticateToken');
 
 // GET all prices
-router.get('/', controller.getAllPrices);
+router.get('/', authenticateToken, controller.getAllPrices);
 
 // GET latest prices
-router.get('/latest', controller.getLatestPrices);
+router.get('/latest', authenticateToken, controller.getLatestPrices);
 
 // POST new price entry
-router.post('/', controller.addPrice);
+router.post('/', authenticateToken, controller.addPrice);
 
 // PUT update price
-router.put('/:metal', controller.updatePrice);
+router.put('/:metal', authenticateToken, controller.updatePrice);
 
 // DELETE price entry
-router.delete('/:metal', controller.deletePrice);
+router.delete('/:metal', authenticateToken, controller.deletePrice);
 
 module.exports = router;

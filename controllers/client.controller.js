@@ -7,7 +7,8 @@ exports.getClients = async (req, res) => {
       const filteredClients = clients.map(client => ({
         Id: client._id,
         Name: client.Name,
-        ImageUrl: client.ImageUrl
+        ImageUrl: client.ImageUrl,
+        PriorityOrder: client.PriorityOrder
       }));
   
       res.json(filteredClients);

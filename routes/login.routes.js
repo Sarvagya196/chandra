@@ -6,6 +6,11 @@ const bcrypt = require('bcrypt');
 
 router.post("/", async(req, res) => {
     try {
+        if (!process.env.JWT_SECRET) {
+            console.error("JWT_SECRET is not configured");
+            return res.status(500).json({ message: "server error" });
+        }
+
         const { email, password} = req.body;
 
         const user = await User.findOne({ email });
@@ -13,8 +18,7 @@ router.post("/", async(req, res) => {
             return res.status(400).json({message: 'Invalid email or Password'});
         }
 
-        // const isMatch = await bcrypt.compare(password, user.password);
-        const isMatch = password == user.password;
+        const isMatch = await bcrypt.compare(password, user.password);
 
         if(!isMatch) {
             return res.status(400).json({message: 'Invalid email or Password'});
@@ -26,7 +30,8 @@ router.post("/", async(req, res) => {
             Role: user.role,
             ClientId: user.clientId||null,
         },
-            process.env.JWT_SECRET
+            process.env.JWT_SECRET,
+            { expiresIn: '8h' }
         );
 
         res.json({token});

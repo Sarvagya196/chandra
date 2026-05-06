@@ -1,11 +1,16 @@
 const express = require('express');
 const router = express.Router();
 const controller = require('../controllers/enquiry.controller');
+const parseController = require('../controllers/enquiryParse.controller');
 const authenticateToken = require('../middleware/authenticateToken');
 const dynamicUpload = require('../middleware/dynamicUpload');
+const enquiryCreateUpload = require('../middleware/enquiryCreateUpload');
 
 // GET all enquiries
 // router.get('/', authenticateToken, controller.getEnquiries);
+
+// AI parse — must be before /:id routes
+router.post('/parse', authenticateToken, parseController.parseEnquiry);
 
 router.get('/export-pdf',
     authenticateToken,
@@ -23,14 +28,14 @@ router.get('/:id', authenticateToken, controller.getEnquiryById);
 // GET enquiries by clientId
 // router.get('/client/:clientId', authenticateToken, controller.getEnquiriesByClientId);
 
-// POST a new enquiry
-router.post('/', authenticateToken, controller.createEnquiry);
+// POST a new enquiry (multipart: JSON body in `data` field, files in `referenceImages`)
+router.post('/', authenticateToken, enquiryCreateUpload, controller.createEnquiry);
 
 // PUT update an enquiry by ID
 router.put('/:id', authenticateToken, controller.updateEnquiry);
 
 // DELETE an enquiry by ID
-router.delete('/:id', controller.deleteEnquiry);
+router.delete('/:id', authenticateToken, controller.deleteEnquiry);
 
 // Upload assets (coral, cad, reference)
 router.post(

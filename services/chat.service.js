@@ -53,7 +53,6 @@ exports.createChat = async (EnquiryId, EnquiryName, Type, Participants) => {
         // Try to clean up and retry once
         try {
           const Chat = require('../models/chat.model');
-          await Chat.cleanupInvalidChats();
           // Retry creating the chat
           const retryChat = await repo.createChat({
             EnquiryId,
