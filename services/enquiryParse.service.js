@@ -79,9 +79,9 @@ ${stoneTypeJson}
 
 Return ONLY a valid JSON object with these keys (use null for anything not mentioned):
 {
-  "Name": "<short summary of the enquiry>",
+  "Name": "<short Very specific summary of the enquiry Not a generic title, something that can be used to describe it and searchable>",
   "ClientId": "<matched client id or null>",
-  "StyleNumber": "<style or design number if mentioned or null>",
+  "StyleNumber": "<style or design number if mentioned it would be 5 or 6 digits like R45252, E63464, etc. or null>",
   "Quantity": <number or null>,
   "Category": "<Ring|Bracelet|Necklace|Earrings|Pendant|Bangle|Other or null>",
   "Priority": "<Normal|High|Super High — infer from urgency keywords like 'urgent', 'asap', 'fast', 'ship soon' or null>",
@@ -94,7 +94,7 @@ Return ONLY a valid JSON object with these keys (use null for anything not menti
   "Stamping": "<string or null>",
   "Remarks": "<copy the exact original message here>",
   "SpecialRemarks": "<any special instructions or additional notes beyond the main request or null>",
-  "ShippingDate": "<ISO date string or null>"
+  "ShippingDate": "<ISO date string or null> Date cannot be in the past. If the message mentions a date, try to extract it and convert to ISO format. If only a relative time is mentioned (e.g. 'in 2 weeks', 'next month', 'by end of this month'), convert that to an absolute date based on the current date. If no date or time is mentioned, return null."
 }
 
 Do not include any explanation or markdown — only the JSON object.`;
