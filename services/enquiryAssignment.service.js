@@ -130,10 +130,9 @@ exports.autoAssignDesigner = async ({ enquiry, referenceDescription, referenceTa
  * Best-effort — every block try/catches.
  */
 exports.postEnquiryCreateHook = async (enquiry) => {
+    console.log(`[post-create] Running post-create hook for enquiry ${enquiry._id} with ${enquiry.ReferenceImages?.length || 0} reference images`);
     const refs = enquiry.ReferenceImages || [];
-    if (refs.length === 0) return;
-
-    const enriched = []; // { description, tags, embedding } per image
+    const enriched = [];
 
     for (const ref of refs) {
         try {
@@ -159,9 +158,23 @@ exports.postEnquiryCreateHook = async (enquiry) => {
         }
     }
 
-    if (enriched.length === 0) return;
+    // Infer category from images if not already set
+    if (enriched.length > 0 && !enquiry.Category) {
+        const votes = enriched.map(e => e.category).filter(Boolean);
+        if (votes.length > 0) {
+            const inferred = votes.sort((a, b) =>
+                votes.filter(v => v === b).length - votes.filter(v => v === a).length
+            )[0];
+            try {
+                await repo.updateEnquiry(enquiry._id, { Category: inferred });
+                enquiry.Category = inferred;
+            } catch (err) {
+                console.error('[post-create] category inference update failed:', err);
+            }
+        }
+    }
 
-    // Auto-assign designer using the combined description + tags
+    // Auto-assign always runs, image data enriches it when available
     try {
         const combinedDescription = enriched.map(e => e.description).join('\n\n');
         const combinedTags = [...new Set(enriched.flatMap(e => e.tags))];
@@ -196,7 +209,8 @@ exports.postEnquiryCreateHook = async (enquiry) => {
         console.error('[post-create] autoAssignDesigner failed:', err);
     }
 
-    // Find similar past designs across all reference embeddings, dedupe by EnquiryId
+    // Find similar past designs — only possible when embeddings exist
+    if (enriched.length === 0) return;
     try {
         const seen = new Map(); // EnquiryId -> match
         for (const e of enriched) {

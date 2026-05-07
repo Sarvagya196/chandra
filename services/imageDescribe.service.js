@@ -9,7 +9,8 @@ Return ONLY a JSON object with no markdown or commentary:
 {
   "description": "<detailed paragraph covering: jewellery type (ring/pendant/bracelet/earring/etc.), metal colour and quality if visible (yellow gold/white gold/rose gold/platinum/silver), setting style (prong/bezel/pavé/channel/flush/tension/halo/cluster/etc.), stone types and colours, approximate stone sizes or carat weight if visible, estimated metal weight range if inferable, dimensions or proportions (band width, overall size, height), design style (solitaire/three-stone/eternity/cocktail/vintage/minimalist/bold/geometric/floral/filigree/etc.), surface finish (polished/matte/hammered/engraved), any stampings or hallmarks visible, and any other distinctive features>",
   "tags": ["<8-15 short searchable tags — include jewellery type, metal colour, setting style, stone type, design style, finish, and any notable techniques like 'filigree', 'milgrain', 'rhodium plated', 'hand engraved', etc.>"],
-  "group": "<classify the design style into exactly one of: Bridal | Hip-hop | Cuban. Bridal = delicate, floral, romantic, engagement/wedding pieces. Hip-hop = bold, iced-out, statement pieces with heavy stone coverage. Cuban = link chains, thick metal, street/luxury aesthetic. Pick the closest match.>"
+  "group": "<classify the design style into exactly one of: Bridal | Hip-hop | Cuban. Bridal = delicate, floral, romantic, engagement/wedding pieces. Hip-hop = bold, iced-out, statement pieces with heavy stone coverage. Cuban = link chains, thick metal, street/luxury aesthetic. Pick the closest match.>",
+  "category": "<jewellery type as exactly one of: Ring | Pendant | Bracelet | Earring | Necklace | Bangle | Chain | Brooch | Anklet | Other>"
 }
 If a measurement, weight, or dimension is clearly visible or can be reasonably estimated from the image, include it.
 If a detail is not visible, omit it rather than guess.`;
@@ -40,12 +41,13 @@ exports.describeAndEmbedImage = async ({ s3Key, mimetype }) => {
         ],
     });
 
-    let description, tags, group;
+    let description, tags, group, category;
     try {
         const parsed = JSON.parse(visionRes.choices[0].message.content);
         description = String(parsed.description || '').trim();
-        tags = Array.isArray(parsed.tags) ? parsed.tags.map(String) : [];
-        group = String(parsed.group || '').trim();
+        tags        = Array.isArray(parsed.tags) ? parsed.tags.map(String) : [];
+        group       = String(parsed.group    || '').trim();
+        category    = String(parsed.category || '').trim();
     } catch {
         throw new Error('Vision model returned invalid JSON');
     }
@@ -62,5 +64,6 @@ exports.describeAndEmbedImage = async ({ s3Key, mimetype }) => {
         tags,
         embedding: embedRes.data[0].embedding,
         group,
+        category,
     };
 };
