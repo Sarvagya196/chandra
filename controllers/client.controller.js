@@ -8,7 +8,8 @@ exports.getClients = async (req, res) => {
         Id: client._id,
         Name: client.Name,
         ImageUrl: client.ImageUrl,
-        PriorityOrder: client.PriorityOrder
+        PriorityOrder: client.PriorityOrder,
+        PricingMessageFormat: client.PricingMessageFormat,
       }));
   
       res.json(filteredClients);

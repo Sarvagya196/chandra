@@ -48,7 +48,7 @@ async function rankDesigner({ designers, referenceTags, referenceDescription, en
                 content: `You are matching a jewellery enquiry to the best designer.
 Consider both skill match AND current workload (activeEnquiries).
 Prefer a designer with strong matching skills and a lower workload.
-If skills are equally matched, prefer the designer with fewer active enquiries.
+IF THE SKILLS ARE EQUALLY MATCHED, prefer the designer with fewer active enquiries, IF NOT THEN THE ONE WITH THE SKILL WILL BE CHOSEN. Do not return the designer with the lowest workload if they have no relevant skills.
 Return ONLY a JSON object: { "chosenId": "<designer id>", "reason": "<short reason>" }.
 If skills are sparse or absent, pick the designer with the fewest active enquiries.`,
             },

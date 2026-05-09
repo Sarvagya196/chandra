@@ -70,6 +70,10 @@ const swaggerSpec = {
                             },
                         },
                     },
+                    PricingMessageFormat: {
+                        type: 'string',
+                        description: 'Template string used to format the client-facing pricing message.',
+                    },
                 },
             },
 
@@ -77,10 +81,25 @@ const swaggerSpec = {
             User: {
                 type: 'object',
                 properties: {
+                    Id:       { type: 'string' },
+                    Name:     { type: 'string' },
+                    Role:     { type: 'number' },
+                    Skills:   { type: 'string' },
+                    email:    { type: 'string', format: 'email' },
+                    phone:    { type: 'string' },
+                    clientId: { type: 'string', description: 'Set for client-role users' },
+                    group:    { type: 'string', enum: ['Bridal', 'Hip-hop', 'Cuban'], description: 'Designer specialisation group' },
+                },
+            },
+            UserSummary: {
+                type: 'object',
+                description: 'Slim user shape returned by the list endpoint (no email/phone/clientId).',
+                properties: {
                     Id:     { type: 'string' },
                     Name:   { type: 'string' },
                     Role:   { type: 'number' },
                     Skills: { type: 'string' },
+                    group:  { type: 'string', enum: ['Bridal', 'Hip-hop', 'Cuban'] },
                 },
             },
 
@@ -435,7 +454,7 @@ const swaggerSpec = {
                     200: {
                         content: {
                             'application/json': {
-                                schema: { type: 'array', items: { $ref: '#/components/schemas/User' } },
+                                schema: { type: 'array', items: { $ref: '#/components/schemas/UserSummary' } },
                             },
                         },
                     },
@@ -459,6 +478,7 @@ const swaggerSpec = {
                                     password: { type: 'string' },
                                     clientId: { type: 'string' },
                                     skills:   { type: 'string' },
+                                    group:    { type: 'string', enum: ['Bridal', 'Hip-hop', 'Cuban'] },
                                 },
                             },
                         },
@@ -498,6 +518,7 @@ const swaggerSpec = {
                                     role:     { type: 'number' },
                                     clientId: { type: 'string' },
                                     skills:   { type: 'string' },
+                                    group:    { type: 'string', enum: ['Bridal', 'Hip-hop', 'Cuban'] },
                                 },
                             },
                         },
