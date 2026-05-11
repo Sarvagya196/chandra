@@ -12,6 +12,7 @@ const xlsx = require('xlsx');
 const codelistsService = require('../services/codelists.service');
 const notificationService = require('../services/notifications.service');
 const reportsService = require('../services/reports.service');
+const { resolvePricingContext, calculatePricingEngine, formatPricingResponse } = require('./pricing.service');
 
 async function generateClientPricingMessage(pricingEntry, pricingMessageFormat) {
     const res = await openai.chat.completions.create({
@@ -695,7 +696,7 @@ async function handleCoralUpload(enquiry, files, version, coralCode, userId) {
                 Markup: 0
             }));
             excelTableJson.Metal = {
-                Weight: excelTableJson.Metal.Weight || null,
+                Weight: excelTableJson.Metal.Weight || 0,
                 Quality: enquiry.Metal.Quality || null,
             };
             excelTableJson.Quantity = enquiry.Quantity || 1;
@@ -703,32 +704,51 @@ async function handleCoralUpload(enquiry, files, version, coralCode, userId) {
             let pricing = await exports.calculatePricing(excelTableJson, enquiry.ClientId);
 
             let pricingEntry = [{
-                MetalPrice: parseFloat(pricing.MetalPrice),
-                DiamondsPrice: parseFloat(pricing.DiamondsPrice),
-                TotalPrice: parseFloat(pricing.TotalPrice),
-                DutiesAmount: parseFloat(pricing.DutiesAmount),
-                DiamondWeight: parseFloat(excelTableJson.DiamondWeight),
+                // --- CORE PRICING ---
+                MetalPrice: +pricing.MetalPrice,
+                DiamondsPrice: +pricing.DiamondsPrice,
+                TotalPrice: +pricing.TotalPrice,
+
+                DutiesAmount: +pricing.DutiesAmount,
+
+                // --- PRODUCT METRICS ---
+                DiamondWeight: pricing.DiamondWeight,
                 TotalPieces: excelTableJson.TotalPieces,
+
+                // --- CLIENT CONTEXT (SNAPSHOT) ---
                 Loss: pricing.Client.Loss,
                 Labour: pricing.Client.Labour,
                 ExtraCharges: pricing.Client.ExtraCharges,
-                Duties: pricing.Client.Duties,
+                UndercutPrice: pricing.Client.UndercutPrice,
+
+                // --- DUTIES (FULL MODEL) ---
+                NaturalDuties: pricing.Client.NaturalDuties,
+                LabDuties: pricing.Client.LabDuties,
+                GoldDuties: pricing.Client.GoldDuties,
+                SilverAndLabsDuties: pricing.Client.SilverAndLabsDuties,
+                LossAndLabourDuties: pricing.Client.LossAndLabourDuties,
+
                 ClientPricingMessage: pricing.ClientPricingMessage || null,
+
+                // --- METAL ---
                 Metal: {
                     Weight: pricing.Metal.Weight,
                     Quality: pricing.Metal.Quality,
                     Rate: pricing.Metal.Rate
                 },
-                Stones: pricing.Stones.map(Stone => ({
-                    Type: Stone.Type,
-                    Color: Stone.Color,
-                    Shape: Stone.Shape,
-                    MmSize: Stone.MmSize,
-                    SieveSize: Stone.SieveSize,
-                    Weight: Stone.Weight,
-                    Pcs: Stone.Pcs,
-                    CtWeight: Stone.CtWeight,
-                    Price: Stone.Price
+
+                // --- STONES ---
+                Stones: (pricing.Stones || []).map(stone => ({
+                    Type: stone.Type,
+                    Color: stone.Color,
+                    Shape: stone.Shape,
+                    MmSize: stone.MmSize,
+                    SieveSize: stone.SieveSize,
+                    Weight: stone.Weight,
+                    Pcs: stone.Pcs,
+                    CtWeight: stone.CtWeight,
+                    Price: stone.Price,
+                    Markup: stone.Markup || 0
                 }))
             }];
 
@@ -828,32 +848,51 @@ async function handleCadUpload(enquiry, files, version, cadCode, userId) {
             let pricing = await exports.calculatePricing(excelTableJson, enquiry.ClientId);
 
             let pricingEntry = [{
-                MetalPrice: parseFloat(pricing.MetalPrice),
-                DiamondsPrice: parseFloat(pricing.DiamondsPrice),
-                TotalPrice: parseFloat(pricing.TotalPrice),
-                DutiesAmount: parseFloat(pricing.DutiesAmount),
-                DiamondWeight: parseFloat(excelTableJson.DiamondWeight),
+                // --- CORE PRICING ---
+                MetalPrice: +pricing.MetalPrice,
+                DiamondsPrice: +pricing.DiamondsPrice,
+                TotalPrice: +pricing.TotalPrice,
+
+                DutiesAmount: +pricing.DutiesAmount,
+
+                // --- PRODUCT METRICS ---
+                DiamondWeight: pricing.DiamondWeight,
                 TotalPieces: excelTableJson.TotalPieces,
+
+                // --- CLIENT CONTEXT (SNAPSHOT) ---
                 Loss: pricing.Client.Loss,
                 Labour: pricing.Client.Labour,
                 ExtraCharges: pricing.Client.ExtraCharges,
-                Duties: pricing.Client.Duties,
+                UndercutPrice: pricing.Client.UndercutPrice,
+
+                // --- DUTIES (FULL MODEL) ---
+                NaturalDuties: pricing.Client.NaturalDuties,
+                LabDuties: pricing.Client.LabDuties,
+                GoldDuties: pricing.Client.GoldDuties,
+                SilverAndLabsDuties: pricing.Client.SilverAndLabsDuties,
+                LossAndLabourDuties: pricing.Client.LossAndLabourDuties,
+
                 ClientPricingMessage: pricing.ClientPricingMessage || null,
+
+                // --- METAL ---
                 Metal: {
                     Weight: pricing.Metal.Weight,
                     Quality: pricing.Metal.Quality,
                     Rate: pricing.Metal.Rate
                 },
-                Stones: pricing.Stones.map(Stone => ({
-                    Type: Stone.Type,
-                    Color: Stone.Color,
-                    Shape: Stone.Shape,
-                    MmSize: Stone.MmSize,
-                    SieveSize: Stone.SieveSize,
-                    Weight: Stone.Weight,
-                    Pcs: Stone.Pcs,
-                    CtWeight: Stone.CtWeight,
-                    Price: Stone.Price
+
+                // --- STONES ---
+                Stones: (pricing.Stones || []).map(stone => ({
+                    Type: stone.Type,
+                    Color: stone.Color,
+                    Shape: stone.Shape,
+                    MmSize: stone.MmSize,
+                    SieveSize: stone.SieveSize,
+                    Weight: stone.Weight,
+                    Pcs: stone.Pcs,
+                    CtWeight: stone.CtWeight,
+                    Price: stone.Price,
+                    Markup: stone.Markup || 0
                 }))
             }];
 
@@ -1081,147 +1120,225 @@ exports.getAggregatedCounts = async (queryParams) => {
     return await repo.aggregateBy(groupBy, filters);
 };
 
+// exports.calculatePricing = async (pricingDetails, clientId) => {
+//     let loss, labour, extraCharges, metalRate, metalFullRate, stones, metalWeight, metalQuality, metalPrice, quantity;
+//     let naturalDuties = 0, labDuties = 0, goldDuties = 0, silverAndLabsDuties = 0, undercutPrice = 0;
+//     stones = pricingDetails.Stones;
+//     metalWeight = parseFloat(pricingDetails.Metal.Weight);
+//     metalQuality = pricingDetails.Metal.Quality;
+//     metalRateOverride = pricingDetails.Metal.Rate;
+//     quantity = pricingDetails.Quantity || 1;
+//     let diamondPriceNotFound = false;
+
+//     const todaysMetalRates = await metalPricesService.getLatest();
+
+//     // Determine metal rate, if override is passed then consider that, otherwise stored rate
+//     if (pricingDetails.Metal.Quality === "Silver 925") {
+//         metalRate = metalRateOverride ?? todaysMetalRates.silver?.price ?? 0;
+//         metalFullRate = metalRateOverride ?? todaysMetalRates.silver?.price ?? 0;
+//     } else if (pricingDetails.Metal.Quality === "Platinum") {
+//         metalRate = metalRateOverride ?? todaysMetalRates.platinum?.price ?? 0;
+//         metalFullRate = metalRateOverride ?? todaysMetalRates.platinum?.price ?? 0;
+//     } else {
+//         const goldRate = metalRateOverride ?? todaysMetalRates.gold?.price ?? 0;
+//         metalFullRate = goldRate;
+//         const quality = pricingDetails.Metal.Quality?.toUpperCase();
+//         const match = quality?.match(/^(\d{1,2})K$/);
+//         if (match) {
+//             const karat = parseInt(match[1], 10);
+//             metalRate = (goldRate * karat) / 24;
+//         } else {
+//             throw new Error(`Invalid gold quality: ${quality}`);
+//         }
+//     }
+
+//     if (clientId === null || clientId === undefined || clientId === "") {
+//         loss = pricingDetails?.Loss || 0;
+//         labour = pricingDetails?.Labour || 0;
+//         extraCharges = pricingDetails?.ExtraCharges || 0;
+//         naturalDuties = pricingDetails?.NaturalDuties || 0;
+//         labDuties = pricingDetails?.LabDuties || 0;
+//         goldDuties = pricingDetails?.GoldDuties || 0;
+//         silverAndLabsDuties = pricingDetails?.SilverAndLabsDuties || 0;
+//         undercutPrice = pricingDetails?.UndercutPrice || 0;
+//     }
+//     else {
+//         const client = await clientService.getClient(clientId);
+//         loss = client?.Pricing?.Loss || 0;
+//         labour = client?.Pricing?.Labour || 0;
+//         extraCharges = client?.Pricing?.ExtraCharges || 0;
+//         naturalDuties = client?.Pricing?.NaturalDuties || 0;
+//         labDuties = client?.Pricing?.LabDuties || 0;
+//         goldDuties = client?.Pricing?.GoldDuties || 0;
+//         silverAndLabsDuties = client?.Pricing?.SilverAndLabsDuties || 0;
+//         undercutPrice = client?.Pricing?.UndercutPrice || 0;
+//         var clientPricingMessageFormat = client?.PricingMessageFormat || null;
+
+//         // Calculate Diamonds Price
+//         stones = stones.map(stone => {
+//             const stoneSize = normalizeMmSize(stone.MmSize);
+
+//             const matchingDiamond = client?.Pricing?.Diamonds.find(diamond =>
+//                 diamond.Type === stone.Type &&
+//                 diamond.Shape === stone.Shape &&
+//                 normalizeMmSize(diamond.MmSize) === stoneSize
+//             );
+
+//             const Price = matchingDiamond ? matchingDiamond.Price ?? 0 : 0;
+
+//             return {
+//                 ...stone,
+//                 Price,
+//                 Markup: 0
+//             };
+//         });
+
+//     }
+
+//     // Calculate Diamonds Price
+//     const { diamondsPrice, diamondWeight } = stones.reduce(
+//         (acc, stone) => {
+//             const ratePerCaratOfStone = stone.Price + (stone.Markup || 0);
+//             if (ratePerCaratOfStone === undefined || ratePerCaratOfStone === null || ratePerCaratOfStone <= 0) {
+//                 diamondPriceNotFound = true;
+//             }
+//             acc.diamondsPrice += parseFloat(stone.CtWeight?.toFixed(3)) * ratePerCaratOfStone;
+//             acc.diamondWeight += parseFloat(stone.CtWeight?.toFixed(3));
+//             return acc;
+//         },
+//         { diamondsPrice: 0, diamondWeight: 0 }
+//     );
+
+//     // Calculate Metal Price
+//     const lossFactor = loss / 100;
+//     metalPrice = parseFloat(metalWeight * ((metalRate * (1 + lossFactor)) + labour)?.toFixed(3));
+
+//     let undercutDiamondsPrice = 0;
+//     if (undercutPrice > 0) {
+//         undercutDiamondsPrice = stones.reduce((acc, stone) => {
+//             const ratePerCaratOfStone = (stone.Price + (stone.Markup || 0)) > undercutPrice ? undercutPrice : (stone.Price + (stone.Markup || 0));
+//             return acc + (stone.CtWeight * ratePerCaratOfStone);
+//         }, 0);
+//     }
+
+//     // Per-category duty bases.
+//     // Stone classification: LabGrown / CVDLabGrown → lab; everything else → natural.
+//     // Metal classification: "Silver 925" → silver; gold karats → gold; others (e.g., Platinum) → no metal duty.
+//     // Silver-metal + lab-stone combination is charged via SilverAndLabsDuties on the combined base
+//     // (replacing both LabDuties on those stones and any metal duty on the silver).
+//     const isLabStone = (type) => type === 'LabGrown' || type === 'CVDLabGrown';
+//     const isSilver = metalQuality === 'Silver 925';
+//     const isGold = !isSilver && metalQuality !== 'Platinum';
+
+//     let naturalStoneBase = 0;
+//     let labStoneInGoldBase = 0;
+//     let labStoneInSilverBase = 0;
+//     stones.forEach(stone => {
+//         const ctWt = parseFloat(stone.CtWeight?.toFixed(3)) || 0;
+//         const fullRate = stone.Price + (stone.Markup || 0);
+//         const dutyRate = (undercutPrice > 0 && fullRate > undercutPrice) ? undercutPrice : fullRate;
+//         const stoneValue = ctWt * dutyRate;
+//         if (isLabStone(stone.Type)) {
+//             if (isSilver) labStoneInSilverBase += stoneValue;
+//             else labStoneInGoldBase += stoneValue;
+//         } else {
+//             naturalStoneBase += stoneValue;
+//         }
+//     });
+
+//     const goldMetalBase = isGold ? metalPrice : 0;
+//     const silverMetalBase = isSilver ? metalPrice : 0;
+
+//     // Apply each of the four rates to its matching base, then collapse to two display
+//     // buckets: stone duty (natural + lab stones, plus the stone portion of SilverAndLabs)
+//     // and metal duty (gold metal, plus the metal portion of SilverAndLabs).
+//     const naturalDutiesAmount = naturalStoneBase * quantity * (naturalDuties / 100);
+//     const labDutiesAmount = labStoneInGoldBase * quantity * (labDuties / 100);
+//     const goldDutiesAmount = goldMetalBase * quantity * (goldDuties / 100);
+//     const silverAndLabsStoneAmount = labStoneInSilverBase * quantity * (silverAndLabsDuties / 100);
+//     const silverAndLabsMetalAmount = silverMetalBase * quantity * (silverAndLabsDuties / 100);
+
+//     const stoneDutyAmount = naturalDutiesAmount + labDutiesAmount + silverAndLabsStoneAmount;
+//     const metalDutyAmount = goldDutiesAmount + silverAndLabsMetalAmount;
+//     const dutiesAmount = stoneDutyAmount + metalDutyAmount;
+
+//     const totalPrice = (((metalPrice + diamondsPrice) * quantity) + dutiesAmount) * (1 + (extraCharges / 100));
+
+//     const result = {
+//         MetalPrice: parseFloat(metalPrice?.toFixed(3)),
+//         DiamondsPrice: diamondPriceNotFound ? 0 : parseFloat(diamondsPrice?.toFixed(3)),
+//         TotalPrice: parseFloat(totalPrice?.toFixed(3)),
+//         DutiesAmount: parseFloat(dutiesAmount?.toFixed(3)),
+//         StoneDutyAmount: parseFloat(stoneDutyAmount?.toFixed(3)),
+//         MetalDutyAmount: parseFloat(metalDutyAmount?.toFixed(3)),
+//         // Tells the UI which underlying duty fields apply for this metal × stone combo,
+//         // so it can show only the relevant inputs in the quote-edit form.
+//         Applicable: {
+//             NaturalDuties: naturalStoneBase > 0,
+//             LabDuties: labStoneInGoldBase > 0,
+//             GoldDuties: isGold && metalPrice > 0,
+//             SilverAndLabsDuties: labStoneInSilverBase > 0
+//         },
+//         Metal: {
+//             Weight: metalWeight,
+//             Quality: metalQuality,
+//             Rate: parseFloat(metalRateOverride ?? metalFullRate)?.toFixed(3)
+//         },
+//         DiamondWeight: parseFloat(diamondWeight?.toFixed(3)),
+//         TotalPieces: pricingDetails.TotalPieces,
+//         Client: {
+//             ExtraCharges: extraCharges,
+//             UndercutPrice: undercutPrice,
+//             NaturalDuties: naturalDuties,
+//             LabDuties: labDuties,
+//             GoldDuties: goldDuties,
+//             SilverAndLabsDuties: silverAndLabsDuties,
+//             Loss: loss,
+//             Labour: labour
+//         },
+//         Stones: stones.map(stone => ({
+//             Type: stone.Type,
+//             Color: stone.Color,
+//             Shape: stone.Shape,
+//             MmSize: stone.MmSize,
+//             SieveSize: stone.SieveSize,
+//             Weight: stone.Weight,
+//             Price: parseFloat(stone.Price?.toFixed(3)) || 0,
+//             Markup: parseFloat(stone.Markup?.toFixed(3)) || 0,
+//             Pcs: stone.Pcs,
+//             CtWeight: stone.CtWeight
+//         }))
+//     };
+
+//     if (clientPricingMessageFormat) {
+//         try {
+//             result.ClientPricingMessage = await generateClientPricingMessage(result, clientPricingMessageFormat);
+//         } catch (err) {
+//             console.error('[pricing-message] generation failed:', err);
+//         }
+//     }
+
+//     return result;
+
+// };
+
+
 exports.calculatePricing = async (pricingDetails, clientId) => {
-    let loss, labour, extraCharges, duties, metalRate, metalFullRate, stones, metalWeight, metalQuality, metalPrice, quantity, undercutPrice;
-    undercutPrice = pricingDetails.UndercutPrice;
-    stones = pricingDetails.Stones;
-    metalWeight = parseFloat(pricingDetails.Metal.Weight);
-    metalQuality = pricingDetails.Metal.Quality;
-    metalRateOverride = pricingDetails.Metal.Rate;
-    quantity = pricingDetails.Quantity || 1;
-    let diamondPriceNotFound = false;
+    const context = await resolvePricingContext(pricingDetails, clientId);
+    const calculation = calculatePricingEngine(context);
+    const result = formatPricingResponse(context, calculation);
 
-    const todaysMetalRates = await metalPricesService.getLatest();
-
-    // Determine metal rate, if override is passed then consider that, otherwise stored rate
-    if (pricingDetails.Metal.Quality === "Silver 925") {
-        metalRate = metalRateOverride ?? todaysMetalRates.silver?.price ?? 0;
-        metalFullRate = metalRateOverride ?? todaysMetalRates.silver?.price ?? 0;
-    } else if (pricingDetails.Metal.Quality === "Platinum") {
-        metalRate = metalRateOverride ?? todaysMetalRates.platinum?.price ?? 0;
-        metalFullRate = metalRateOverride ?? todaysMetalRates.platinum?.price ?? 0;
-    } else {
-        const goldRate = metalRateOverride ?? todaysMetalRates.gold?.price ?? 0;
-        metalFullRate = goldRate;
-        const quality = pricingDetails.Metal.Quality?.toUpperCase();
-        const match = quality?.match(/^(\d{1,2})K$/);
-        if (match) {
-            const karat = parseInt(match[1], 10);
-            metalRate = (goldRate * karat) / 24;
-        } else {
-            throw new Error(`Invalid gold quality: ${quality}`);
-        }
-    }
-
-    if (clientId === null || clientId === undefined || clientId === "") {
-        loss = pricingDetails?.Loss || 0;
-        labour = pricingDetails?.Labour || 0;
-        extraCharges = pricingDetails?.ExtraCharges || 0;
-        duties = pricingDetails?.Duties || 0;
-    }
-    else {
-        const client = await clientService.getClient(clientId);
-        loss = client?.Pricing?.Loss || 0;
-        labour = client?.Pricing?.Labour || 0;
-        extraCharges = client?.Pricing?.ExtraCharges || 0;
-        duties = client?.Pricing?.Duties || 0;
-        var clientPricingMessageFormat = client?.PricingMessageFormat || null;
-
-        // Calculate Diamonds Price
-        stones = stones.map(stone => {
-            const stoneSize = normalizeMmSize(stone.MmSize);
-
-            const matchingDiamond = client?.Pricing?.Diamonds.find(diamond =>
-                diamond.Type === stone.Type &&
-                diamond.Shape === stone.Shape &&
-                normalizeMmSize(diamond.MmSize) === stoneSize
-            );
-
-            const Price = matchingDiamond ? matchingDiamond.Price ?? 0 : 0;
-
-            return {
-                ...stone,
-                Price,
-                Markup: 0
-            };
-        });
-
-    }
-
-    // Calculate Diamonds Price
-    const { diamondsPrice, diamondWeight } = stones.reduce(
-        (acc, stone) => {
-            const ratePerCaratOfStone = stone.Price + (stone.Markup || 0);
-            if (ratePerCaratOfStone === undefined || ratePerCaratOfStone === null || ratePerCaratOfStone <= 0) {
-                diamondPriceNotFound = true;
-            }
-            acc.diamondsPrice += parseFloat(stone.CtWeight?.toFixed(3)) * ratePerCaratOfStone;
-            acc.diamondWeight += parseFloat(stone.CtWeight?.toFixed(3));
-            return acc;
-        },
-        { diamondsPrice: 0, diamondWeight: 0 }
-    );
-
-    // Calculate Metal Price
-    const lossFactor = loss / 100;
-    metalPrice = parseFloat(metalWeight * ((metalRate * (1 + lossFactor)) + labour)?.toFixed(3));
-
-    let undercutDiamondsPrice = 0;
-    if (undercutPrice > 0) {
-        undercutDiamondsPrice = stones.reduce((acc, stone) => {
-            const ratePerCaratOfStone = (stone.Price + (stone.Markup || 0)) > undercutPrice ? undercutPrice : (stone.Price + (stone.Markup || 0));
-            return acc + (stone.CtWeight * ratePerCaratOfStone);
-        }, 0);
-    }
-
-    const subtotal = ((metalPrice + (undercutPrice > 0 ? undercutDiamondsPrice : diamondsPrice)) * quantity) + extraCharges;
-    let dutiesAmount = subtotal * (duties / 100);
-
-    const totalPrice = ((metalPrice + diamondsPrice) * quantity) + extraCharges + dutiesAmount;
-
-    const result = {
-        MetalPrice: parseFloat(metalPrice?.toFixed(3)),
-        DiamondsPrice: diamondPriceNotFound ? 0 : parseFloat(diamondsPrice?.toFixed(3)),
-        TotalPrice: parseFloat(totalPrice?.toFixed(3)),
-        DutiesAmount: parseFloat(dutiesAmount?.toFixed(3)),
-        Metal: {
-            Weight: metalWeight,
-            Quality: metalQuality,
-            Rate: parseFloat(metalRateOverride ?? metalFullRate)?.toFixed(3)
-        },
-        DiamondWeight: parseFloat(diamondWeight?.toFixed(3)),
-        TotalPieces: pricingDetails.TotalPieces,
-        Client: {
-            ExtraCharges: extraCharges,
-            Duties: duties,
-            Loss: loss,
-            Labour: labour
-        },
-        Stones: stones.map(stone => ({
-            Type: stone.Type,
-            Color: stone.Color,
-            Shape: stone.Shape,
-            MmSize: stone.MmSize,
-            SieveSize: stone.SieveSize,
-            Weight: stone.Weight,
-            Price: parseFloat(stone.Price?.toFixed(3)) || 0,
-            Markup: parseFloat(stone.Markup?.toFixed(3)) || 0,
-            Pcs: stone.Pcs,
-            CtWeight: stone.CtWeight
-        }))
-    };
-
-    if (clientPricingMessageFormat) {
+    if (context.pricingMessageFormat) {
         try {
-            result.ClientPricingMessage = await generateClientPricingMessage(result, clientPricingMessageFormat);
+            result.ClientPricingMessage = await generateClientPricingMessage(result, context.pricingMessageFormat);
         } catch (err) {
             console.error('[pricing-message] generation failed:', err);
         }
     }
 
     return result;
-
 };
+
 
 exports.massActionEnquiries = async ({ enquiryIds, updateType, newStatus, userId }) => {
 
@@ -1313,32 +1430,6 @@ async function searchEnquiriesInternal(queryParams, options = {}) {
         limit
     };
 };
-
-
-function normalizeMmSize(value) {
-    if (!value) return "";
-
-    // Convert to lowercase and trim spaces
-    value = value.toLowerCase().trim();
-
-    // Remove all spaces
-    value = value.replace(/\s+/g, "");
-
-    // If it's a range "2x3"
-    if (value.includes("x")) {
-        const parts = value.split("x").map(v => normalizeNumber(v));
-        return parts.join("x"); // "2x3"
-    }
-
-    // If it's a single number "1.00"
-    return normalizeNumber(value);
-}
-
-// Normalize a single number
-function normalizeNumber(num) {
-    const n = parseFloat(num);
-    return isNaN(n) ? num : n.toString();  
-}
 
 
 exports.getPresignedUrl = async (key, action) => {
