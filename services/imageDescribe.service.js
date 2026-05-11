@@ -15,6 +15,17 @@ Return ONLY a JSON object with no markdown or commentary:
 If a measurement, weight, or dimension is clearly visible or can be reasonably estimated from the image, include it.
 If a detail is not visible, omit it rather than guess.`;
 
+// Tolerates markdown-fenced JSON or surrounding prose; returns null on failure.
+const safeParseJson = (raw) => {
+    if (!raw || typeof raw !== 'string') return null;
+    const cleaned = raw.trim().replace(/^```(?:json)?\s*/i, '').replace(/\s*```$/i, '');
+    try { return JSON.parse(cleaned); } catch { /* try slice */ }
+    const start = cleaned.indexOf('{');
+    const end   = cleaned.lastIndexOf('}');
+    if (start === -1 || end <= start) return null;
+    try { return JSON.parse(cleaned.slice(start, end + 1)); } catch { return null; }
+};
+
 /**
  * Describe an image with GPT-4o vision and embed the description.
  * Returns null if the file isn't an image.
@@ -41,16 +52,24 @@ exports.describeAndEmbedImage = async ({ s3Key, mimetype }) => {
         ],
     });
 
-    let description, tags, group, category;
-    try {
-        const parsed = JSON.parse(visionRes.choices[0].message.content);
-        description = String(parsed.description || '').trim();
-        tags        = Array.isArray(parsed.tags) ? parsed.tags.map(String) : [];
-        group       = String(parsed.group    || '').trim();
-        category    = String(parsed.category || '').trim();
-    } catch {
-        throw new Error('Vision model returned invalid JSON');
+    const message = visionRes.choices?.[0]?.message;
+    const rawContent = message?.content ?? '';
+
+    if (message?.refusal) {
+        console.warn(`[vision] model refused for ${s3Key}: ${message.refusal}`);
+        return null;
     }
+
+    const parsed = safeParseJson(rawContent);
+    if (!parsed) {
+        console.warn(`[vision] non-JSON response for ${s3Key}. Raw: ${rawContent.slice(0, 500)}`);
+        return null;
+    }
+
+    const description = String(parsed.description || '').trim();
+    const tags        = Array.isArray(parsed.tags) ? parsed.tags.map(String) : [];
+    const group       = String(parsed.group    || '').trim();
+    const category    = String(parsed.category || '').trim();
 
     if (!description) return null;
 
