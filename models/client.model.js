@@ -13,7 +13,12 @@ const DiamondSchema = new mongoose.Schema({
     Loss: { type: Number },
     Labour: { type: Number },
     ExtraCharges: { type: Number },
-    Duties: { type: Number },
+    NaturalDuties: { type: Number },
+    LabDuties: { type: Number },
+    GoldDuties: { type: Number },
+    SilverAndLabsDuties: { type: Number },
+    LossAndLabourDuties: { type: Number },
+    UndercutPrice: { type: Number },
     Diamonds: [DiamondSchema]
   }, { _id: false });
   
