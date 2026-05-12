@@ -41,6 +41,7 @@ async function resolvePricingContext(pricingDetails, clientId) {
         if (!match) throw new Error(`Invalid gold quality: ${metalQuality}`);
 
         metalRate = (goldRate * parseInt(match[1], 10)) / 24;
+        console.log(`[pricing] gold rate: ${goldRate}, karat: ${match[1]}, metalRate: ${metalRate}`);
     }
 
     let client = clientId ? await clientService.getClient(clientId) : null;
@@ -94,11 +95,16 @@ function calculatePricingEngine(context) {
     const { metal, stones, quantity, duties, charges } = context;
 
     const lossFactor = charges.loss / 100;
+    console.log(`[pricing] lossFactor: ${lossFactor} (loss: ${charges.loss}%)`);
 
     const lossAmount = metal.weight * metal.rate * lossFactor;
+    console.log(`[pricing] lossAmount: ${lossAmount} (weight: ${metal.weight} * rate: ${metal.rate} * lossFactor: ${lossFactor})`);
+
     const labourAmount = metal.weight * charges.labour;
+    console.log(`[pricing] labourAmount: ${labourAmount} (weight: ${metal.weight} * labour: ${charges.labour})`);
 
     const metalPrice = metal.weight * ((metal.rate * (1 + lossFactor)) + charges.labour);
+    console.log(`[pricing] metalPrice: ${metalPrice} (weight: ${metal.weight}, rate: ${metal.rate}, lossFactor: ${lossFactor}, labour: ${charges.labour})`);
 
     // --- DIAMONDS ---
     let diamondsPrice = 0;
@@ -106,7 +112,9 @@ function calculatePricingEngine(context) {
 
     stones.forEach(stone => {
         const rate = stone.Price + (stone.Markup || 0);
-        diamondsPrice += stone.CtWeight * rate;
+        const stoneValue = stone.CtWeight * rate;
+        console.log(`[pricing] stone [${stone.Type} ${stone.Shape}]: ctWeight: ${stone.CtWeight}, price: ${stone.Price}, markup: ${stone.Markup || 0}, rate: ${rate}, value: ${stoneValue}`);
+        diamondsPrice += stoneValue;
         diamondWeight += stone.CtWeight;
     });
 
@@ -126,15 +134,32 @@ function calculatePricingEngine(context) {
             naturalBase += val;
         }
     });
+    console.log(`[pricing] bases — naturalBase: ${naturalBase}, labGoldBase: ${labGoldBase}, labSilverBase: ${labSilverBase}`);
 
     const goldBase = isGold ? metalPrice : 0;
     const silverBase = isSilver ? metalPrice : 0;
+    console.log(`[pricing] goldBase: ${goldBase}, silverBase: ${silverBase} (isGold: ${isGold}, isSilver: ${isSilver})`);
 
     const lossAndLabourBase = lossAmount + labourAmount;
+    console.log(`[pricing] lossAndLabourBase: ${lossAndLabourBase} (lossAmount: ${lossAmount} + labourAmount: ${labourAmount})`);
+
+    // --- NATURAL DUTIES BASE (capped at undercutPrice if provided) ---
+    let naturalBaseCappedForDuties = 0;
+    stones.forEach(stone => {
+        if (!isLab(stone.Type)) {
+            const stonePrice = stone.Price + (stone.Markup || 0);
+            const stonePriceCapped = charges.undercutPrice > 0 
+                ? Math.min(stonePrice, charges.undercutPrice)
+                : stonePrice;
+            const val = stone.CtWeight * stonePriceCapped;
+            naturalBaseCappedForDuties += val;
+        }
+    });
+    console.log(`[pricing] naturalBaseCappedForDuties: ${naturalBaseCappedForDuties} (capped at undercutPrice: ${charges.undercutPrice})`);
 
     // --- DUTIES ---
     const breakdown = {
-        natural: naturalBase * quantity * duties.natural / 100,
+        natural: naturalBaseCappedForDuties * quantity * duties.natural / 100,
         lab: labGoldBase * quantity * duties.lab / 100,
         gold: goldBase * quantity * duties.gold / 100,
         silverAndLab:
@@ -142,12 +167,15 @@ function calculatePricingEngine(context) {
         lossAndLabour:
             lossAndLabourBase * quantity * duties.lossAndLabour / 100
     };
+    console.log(`[pricing] duties breakdown:`, breakdown);
 
     const dutiesAmount = Object.values(breakdown).reduce((a, b) => a + b, 0);
+    console.log(`[pricing] dutiesAmount: ${dutiesAmount}`);
 
     const totalPrice =
         (((metalPrice + diamondsPrice) * quantity) + dutiesAmount) *
         (1 + (charges.extraCharges / 100));
+    console.log(`[pricing] totalPrice: ${totalPrice} (metalPrice: ${metalPrice}, diamondsPrice: ${diamondsPrice}, quantity: ${quantity}, dutiesAmount: ${dutiesAmount}, extraCharges: ${charges.extraCharges}%)`);
 
     return {
         metalPrice,
@@ -170,6 +198,7 @@ function calculatePricingEngine(context) {
 }
 
 function formatPricingResponse(context, calc) {
+    console.log(context);
     return {
         MetalPrice: +calc.metalPrice.toFixed(3),
         DiamondsPrice: +calc.diamondsPrice.toFixed(3),
