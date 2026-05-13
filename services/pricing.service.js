@@ -109,6 +109,7 @@ function calculatePricingEngine(context) {
     // --- DIAMONDS ---
     let diamondsPrice = 0;
     let diamondWeight = 0;
+    let totalPieces = 0;
 
     stones.forEach(stone => {
         const rate = stone.Price + (stone.Markup || 0);
@@ -116,6 +117,7 @@ function calculatePricingEngine(context) {
         console.log(`[pricing] stone [${stone.Type} ${stone.Shape}]: ctWeight: ${stone.CtWeight}, price: ${stone.Price}, markup: ${stone.Markup || 0}, rate: ${rate}, value: ${stoneValue}`);
         diamondsPrice += stoneValue;
         diamondWeight += stone.CtWeight;
+        totalPieces += stone.Pcs || 0;
     });
 
     // --- CLASSIFICATION ---
@@ -184,6 +186,7 @@ function calculatePricingEngine(context) {
         dutiesAmount,
         breakdown,
         totalPrice,
+        totalPieces,
 
         // 🔥 THIS IS THE KEY FIX
         bases: {
@@ -221,7 +224,7 @@ function formatPricingResponse(context, calc) {
         },
 
         DiamondWeight: +calc.diamondWeight.toFixed(3),
-        TotalPieces: context.totalPieces,
+        TotalPieces: calc.totalPieces,
 
         Stones: context.stones.map(stone => ({
             Type: stone.Type,
