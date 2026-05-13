@@ -1,5 +1,8 @@
 const metalPricesService = require('./metalPrices.service');
 const clientService = require('./client.service');
+const OpenAI = require('openai');
+
+const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
 
 function normalizeNumber(num) {
     const n = parseFloat(num);
@@ -248,14 +251,57 @@ function formatPricingResponse(context, calc) {
             LabDuties: context.duties.lab,
             GoldDuties: context.duties.gold,
             SilverAndLabsDuties: context.duties.silverAndLab,
-            LossAndLabourDuties: context.duties.lossAndLabour
+            LossAndLabourDuties: context.duties.lossAndLabour,
+            PricingMessageFormat: context.pricingMessageFormat
         }
     };
 }
 
+async function generatePricingMessage(pricingResponse, pricingMessageFormat) {
+    // If no format is provided, return null
+    if (!pricingMessageFormat) return null;
+
+    try {
+        const res = await openai.chat.completions.create({
+            model: process.env.OPENAI_MODEL || 'gpt-4o',
+            messages: [
+                {
+                    role: 'system',
+                    content: `You are a jewellery pricing message formatter. Format the pricing details according to the client's specified format template.
+The format template may include placeholders like {TotalPrice}, {MetalPrice}, {DiamondsPrice}, {DutiesAmount}, {DiamondWeight}, {TotalPieces}, etc.
+Generate a professional, concise pricing message following the exact format provided.`,
+                },
+                {
+                    role: 'user',
+                    content: `Format Template:\n${pricingMessageFormat}\n\nPricing Details:\n${JSON.stringify(pricingResponse, null, 2)}\n\nGenerate the formatted pricing message:`,
+                },
+            ],
+        });
+
+        return res.choices[0].message.content;
+    } catch (error) {
+        console.error('[pricing] Error generating pricing message:', error);
+        return null;
+    }
+}
+
+async function calculatePricing(pricingDetails, clientId) {
+    const context = await resolvePricingContext(pricingDetails, clientId);
+    const calculation = calculatePricingEngine(context);
+    const result = formatPricingResponse(context, calculation);
+
+    if (context.pricingMessageFormat) {
+        result.ClientPricingMessage = await generatePricingMessage(result, context.pricingMessageFormat);
+    }
+
+    return result;
+}
+
 module.exports = {
+    calculatePricing,
     resolvePricingContext,
     calculatePricingEngine,
     formatPricingResponse,
+    generatePricingMessage,
     normalizeMmSize
 };
