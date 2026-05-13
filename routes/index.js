@@ -10,6 +10,7 @@ const chatRoutes = require('./chat.routes');
 const codelistsRoutes = require('./codelists.routes');
 const messageRoutes = require('./message.routes');
 const notificationsRoutes = require('./notifications.routes');
+const imageValidationRoutes = require('./imageValidation.routes');
 
 router.use('/enquiries', enquiryRoutes);
 router.use('/clients', clientRoutes);
@@ -20,5 +21,6 @@ router.use('/chats', chatRoutes);
 router.use('/message', messageRoutes);
 router.use('/codelists', codelistsRoutes);
 router.use('/notifications', notificationsRoutes);
+router.use('/validate-image', imageValidationRoutes);
 
 module.exports = router;

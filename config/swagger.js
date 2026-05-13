@@ -485,6 +485,18 @@ const swaggerSpec = {
                 },
             },
 
+            // ── Image Validation ─────────────────────────────────────────────
+            ImageValidationResult: {
+                type: 'object',
+                description: 'LLM-generated comparison of a jewelry image against the enquiry description.',
+                properties: {
+                    summary:    { type: 'string', description: 'Short paragraph summarising mismatches or confirming alignment' },
+                    issues:     { type: 'array', items: { type: 'string' }, description: 'Bullet-point list of specific mismatches or missing elements. Empty array means no issues found.' },
+                    confidence: { type: 'string', enum: ['high', 'medium', 'low'], description: 'LLM confidence in the comparison' },
+                },
+                required: ['summary', 'issues', 'confidence'],
+            },
+
             // ── Errors ───────────────────────────────────────────────────────
             Error: {
                 type: 'object',
@@ -1188,6 +1200,45 @@ const swaggerSpec = {
                 responses: {
                     200: { description: 'Marked read' },
                     404: { description: 'Not found' },
+                },
+            },
+        },
+
+        // ════════════════════════════════════════════════════════════════════
+        // Image Validation
+        // ════════════════════════════════════════════════════════════════════
+        '/api/validate-image': {
+            post: {
+                tags: ['Image Validation'],
+                summary: 'Validate a jewelry image against an enquiry description',
+                description: 'Fetches the enquiry from the database (source of truth), builds a description from its fields (Category, Metal, StoneType, Remarks, SpecialRemarks), then calls GPT-4o Vision to compare the uploaded image against that description. Returns structured issues and a confidence level. Stateless — no image is stored.',
+                requestBody: {
+                    required: true,
+                    content: {
+                        'multipart/form-data': {
+                            schema: {
+                                type: 'object',
+                                required: ['image', 'enquiryId'],
+                                properties: {
+                                    image:     { type: 'string', format: 'binary', description: 'Jewelry image (any common image format, max 10 MB)' },
+                                    enquiryId: { type: 'string', description: 'MongoDB ObjectId of the enquiry to validate against' },
+                                },
+                            },
+                        },
+                    },
+                },
+                responses: {
+                    200: {
+                        description: 'Validation result',
+                        content: {
+                            'application/json': {
+                                schema: { $ref: '#/components/schemas/ImageValidationResult' },
+                            },
+                        },
+                    },
+                    400: { description: 'Missing image or enquiryId, or enquiry has no usable description' },
+                    404: { description: 'Enquiry not found' },
+                    500: { description: 'LLM call failed or returned an invalid response' },
                 },
             },
         },
