@@ -11,6 +11,7 @@ const codelistsRoutes = require('./codelists.routes');
 const messageRoutes = require('./message.routes');
 const notificationsRoutes = require('./notifications.routes');
 const imageValidationRoutes = require('./imageValidation.routes');
+const imagePricingRoutes = require('./imagePricing.routes');
 
 router.use('/enquiries', enquiryRoutes);
 router.use('/clients', clientRoutes);
@@ -22,5 +23,6 @@ router.use('/message', messageRoutes);
 router.use('/codelists', codelistsRoutes);
 router.use('/notifications', notificationsRoutes);
 router.use('/validate-image', imageValidationRoutes);
+router.use('/image-pricing', imagePricingRoutes);
 
 module.exports = router;

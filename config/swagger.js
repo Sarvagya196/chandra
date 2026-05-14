@@ -1205,6 +1205,70 @@ const swaggerSpec = {
         },
 
         // ════════════════════════════════════════════════════════════════════
+        // Image Pricing
+        // ════════════════════════════════════════════════════════════════════
+        '/api/image-pricing': {
+            post: {
+                tags: ['Image Pricing'],
+                summary: 'Extract stone/metal data from an image and return pricing',
+                description: 'Uploads a jewelry data-table image to GPT-4o Vision, which extracts the stones table (color, shape, mm size, sieve size, average weight, pcs, ct weight), metal weight, and metal quality. The extracted data is then passed to the pricing engine along with the client ID to produce a full pricing breakdown. Returns both the raw extracted data and the calculated pricing.',
+                requestBody: {
+                    required: true,
+                    content: {
+                        'multipart/form-data': {
+                            schema: {
+                                type: 'object',
+                                required: ['image', 'clientId', 'stoneType'],
+                                properties: {
+                                    image: { type: 'string', format: 'binary', description: 'Image of the jewelry data table (max 20 MB)' },
+                                    clientId: { type: 'string', description: 'MongoDB ObjectId of the client (used to apply client-specific pricing policy)' },
+                                    stoneType: { type: 'string', description: 'Stone type to apply to all stones (e.g. LabGrown, CVDLabGrown). Defaults to empty if omitted.' },
+                                    quantity: { type: 'integer', description: 'Number of pieces to price. Defaults to 1.' },
+                                    metalQuality: { type: 'string', description: 'Override metal quality (e.g. 18K, 14K, Silver 925, Platinum). If omitted, extracted from image.' },
+                                },
+                            },
+                        },
+                    },
+                },
+                responses: {
+                    200: {
+                        description: 'Extracted data and calculated pricing',
+                        content: {
+                            'application/json': {
+                                schema: {
+                                    type: 'object',
+                                    properties: {
+                                        extractedData: {
+                                            type: 'object',
+                                            description: 'Raw data extracted by the LLM from the image',
+                                            properties: {
+                                                Stones: {
+                                                    type: 'array',
+                                                    items: { $ref: '#/components/schemas/StoneInput' },
+                                                },
+                                                Metal: {
+                                                    type: 'object',
+                                                    properties: {
+                                                        Weight: { type: 'string' },
+                                                        Quality: { type: 'string' },
+                                                    },
+                                                },
+                                                TotalPieces: { type: 'integer' },
+                                            },
+                                        },
+                                        pricing: { $ref: '#/components/schemas/PricingResult' },
+                                    },
+                                },
+                            },
+                        },
+                    },
+                    400: { description: 'Missing image or clientId, or LLM extraction failed' },
+                    500: { description: 'LLM call failed or pricing engine error' },
+                },
+            },
+        },
+
+        // ════════════════════════════════════════════════════════════════════
         // Image Validation
         // ════════════════════════════════════════════════════════════════════
         '/api/validate-image': {
