@@ -34,6 +34,7 @@ Rules:
 - Do NOT output anything outside the JSON object`;
 
 async function extractPricingDataFromImage(imageBuffer, mimeType) {
+    // exported below for reuse in coral/cad upload flows
     const base64 = imageBuffer.toString('base64');
     const dataUrl = `data:${mimeType};base64,${base64}`;
 
@@ -54,6 +55,8 @@ async function extractPricingDataFromImage(imageBuffer, mimeType) {
 
     return JSON.parse(response.choices[0].message.content);
 }
+
+exports.extractPricingDataFromImage = extractPricingDataFromImage;
 
 function validateExtracted(data) {
     if (!data || typeof data !== 'object') throw new Error('LLM returned invalid data');

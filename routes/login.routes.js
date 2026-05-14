@@ -30,8 +30,7 @@ router.post("/", async(req, res) => {
             Role: user.role,
             ClientId: user.clientId||null,
         },
-            process.env.JWT_SECRET,
-            { expiresIn: '8h' }
+            process.env.JWT_SECRET
         );
 
         res.json({token});

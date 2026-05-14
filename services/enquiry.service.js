@@ -658,7 +658,9 @@ async function handleCoralUpload(enquiry, files, version, coralCode, userId) {
         }
     }
 
-    if (files.excel && files.excel.length > 0) {
+    let tableJson = null;
+
+    if (files.excel?.length > 0) {
         const excelFile = files.excel[0];
         const key = await uploadToS3(excelFile);
         asset.Excel = {
@@ -666,73 +668,65 @@ async function handleCoralUpload(enquiry, files, version, coralCode, userId) {
             Key: key,
             Description: excelFile.originalname
         };
-
-        let excelTableJson = await handleExcelDataForCoral(files.excel?.[0]);
-        if (excelTableJson) {
-            excelTableJson.Stones = excelTableJson.Stones.map(stone => ({
-                ...stone,
-                Type: enquiry.StoneType, // Add StoneType from enquiry
-                Markup: 0
-            }));
-            excelTableJson.Metal = {
-                Weight: excelTableJson.Metal.Weight || 0,
-                Quality: enquiry.Metal.Quality || null,
-            };
-            excelTableJson.Quantity = enquiry.Quantity || 1;
-
-            let pricing = await exports.calculatePricing(excelTableJson, enquiry.ClientId);
-
-            let pricingEntry = [{
-                // --- CORE PRICING ---
-                MetalPrice: +pricing.MetalPrice,
-                DiamondsPrice: +pricing.DiamondsPrice,
-                TotalPrice: +pricing.TotalPrice,
-
-                DutiesAmount: +pricing.DutiesAmount,
-
-                // --- PRODUCT METRICS ---
-                DiamondWeight: pricing.DiamondWeight,
-                TotalPieces: excelTableJson.TotalPieces,
-
-                // --- CLIENT CONTEXT (SNAPSHOT) ---
-                Loss: pricing.Client.Loss,
-                Labour: pricing.Client.Labour,
-                ExtraCharges: pricing.Client.ExtraCharges,
-                UndercutPrice: pricing.Client.UndercutPrice,
-
-                // --- DUTIES (FULL MODEL) ---
-                NaturalDuties: pricing.Client.NaturalDuties,
-                LabDuties: pricing.Client.LabDuties,
-                GoldDuties: pricing.Client.GoldDuties,
-                SilverAndLabsDuties: pricing.Client.SilverAndLabsDuties,
-                LossAndLabourDuties: pricing.Client.LossAndLabourDuties,
-
-                ClientPricingMessage: pricing.ClientPricingMessage || null,
-
-                // --- METAL ---
-                Metal: {
-                    Weight: pricing.Metal.Weight,
-                    Quality: pricing.Metal.Quality,
-                    Rate: pricing.Metal.Rate
-                },
-
-                // --- STONES ---
-                Stones: (pricing.Stones || []).map(stone => ({
-                    Type: stone.Type,
-                    Color: stone.Color,
-                    Shape: stone.Shape,
-                    MmSize: stone.MmSize,
-                    SieveSize: stone.SieveSize,
-                    Weight: stone.Weight,
-                    Pcs: stone.Pcs,
-                    CtWeight: stone.CtWeight,
-                    Price: stone.Price,
-                    Markup: stone.Markup || 0
-                }))
-            }];
-
-            asset.Pricing = pricingEntry || null;
+        tableJson = await handleExcelDataForCoral(excelFile);
+    } else if (files.images?.length > 0) {
+        const { extractPricingDataFromImage } = require('./imagePricing.service');
+        try {
+            tableJson = await extractPricingDataFromImage(files.images[0].buffer, files.images[0].mimetype);
+        } catch (err) {
+            console.error('[handleCoralUpload] LLM extraction failed, skipping pricing:', err);
         }
+    }
+
+    if (tableJson) {
+        tableJson.Stones = tableJson.Stones.map(stone => ({
+            ...stone,
+            Type: enquiry.StoneType,
+            Markup: 0
+        }));
+        tableJson.Metal = {
+            Weight: tableJson.Metal.Weight || 0,
+            Quality: enquiry.Metal.Quality || tableJson.Metal.Quality || null,
+        };
+        tableJson.Quantity = enquiry.Quantity || 1;
+
+        let pricing = await exports.calculatePricing(tableJson, enquiry.ClientId);
+
+        asset.Pricing = [{
+            MetalPrice: +pricing.MetalPrice,
+            DiamondsPrice: +pricing.DiamondsPrice,
+            TotalPrice: +pricing.TotalPrice,
+            DutiesAmount: +pricing.DutiesAmount,
+            DiamondWeight: pricing.DiamondWeight,
+            TotalPieces: tableJson.TotalPieces,
+            Loss: pricing.Client.Loss,
+            Labour: pricing.Client.Labour,
+            ExtraCharges: pricing.Client.ExtraCharges,
+            UndercutPrice: pricing.Client.UndercutPrice,
+            NaturalDuties: pricing.Client.NaturalDuties,
+            LabDuties: pricing.Client.LabDuties,
+            GoldDuties: pricing.Client.GoldDuties,
+            SilverAndLabsDuties: pricing.Client.SilverAndLabsDuties,
+            LossAndLabourDuties: pricing.Client.LossAndLabourDuties,
+            ClientPricingMessage: pricing.ClientPricingMessage || null,
+            Metal: {
+                Weight: pricing.Metal.Weight,
+                Quality: pricing.Metal.Quality,
+                Rate: pricing.Metal.Rate
+            },
+            Stones: (pricing.Stones || []).map(stone => ({
+                Type: stone.Type,
+                Color: stone.Color,
+                Shape: stone.Shape,
+                MmSize: stone.MmSize,
+                SieveSize: stone.SieveSize,
+                Weight: stone.Weight,
+                Pcs: stone.Pcs,
+                CtWeight: stone.CtWeight,
+                Price: stone.Price,
+                Markup: stone.Markup || 0
+            }))
+        }];
     }
 
     // Push to the Coral array
@@ -802,7 +796,9 @@ async function handleCadUpload(enquiry, files, version, cadCode, userId) {
         }
     }
 
-    if (files.excel && files.excel.length > 0) {
+    let tableJson = null;
+
+    if (files.excel?.length > 0) {
         const excelFile = files.excel[0];
         const key = await uploadToS3(excelFile);
         asset.Excel = {
@@ -810,73 +806,65 @@ async function handleCadUpload(enquiry, files, version, cadCode, userId) {
             Key: key,
             Description: excelFile.originalname
         };
-
-        let excelTableJson = await handleExcelDataForCad(files.excel[0]);
-        if (excelTableJson) {
-            excelTableJson.Stones = excelTableJson.Stones.map(stone => ({
-                ...stone,
-                Type: enquiry.StoneType, // Add StoneType from enquiry
-                Markup: 0
-            }));
-            excelTableJson.Metal = {
-                Weight: excelTableJson.Metal.Weight || null,
-                Quality: enquiry.Metal.Quality || null,
-            };
-            excelTableJson.Quantity = enquiry.Quantity || 1;
-
-            let pricing = await exports.calculatePricing(excelTableJson, enquiry.ClientId);
-
-            let pricingEntry = [{
-                // --- CORE PRICING ---
-                MetalPrice: +pricing.MetalPrice,
-                DiamondsPrice: +pricing.DiamondsPrice,
-                TotalPrice: +pricing.TotalPrice,
-
-                DutiesAmount: +pricing.DutiesAmount,
-
-                // --- PRODUCT METRICS ---
-                DiamondWeight: pricing.DiamondWeight,
-                TotalPieces: excelTableJson.TotalPieces,
-
-                // --- CLIENT CONTEXT (SNAPSHOT) ---
-                Loss: pricing.Client.Loss,
-                Labour: pricing.Client.Labour,
-                ExtraCharges: pricing.Client.ExtraCharges,
-                UndercutPrice: pricing.Client.UndercutPrice,
-
-                // --- DUTIES (FULL MODEL) ---
-                NaturalDuties: pricing.Client.NaturalDuties,
-                LabDuties: pricing.Client.LabDuties,
-                GoldDuties: pricing.Client.GoldDuties,
-                SilverAndLabsDuties: pricing.Client.SilverAndLabsDuties,
-                LossAndLabourDuties: pricing.Client.LossAndLabourDuties,
-
-                ClientPricingMessage: pricing.ClientPricingMessage || null,
-
-                // --- METAL ---
-                Metal: {
-                    Weight: pricing.Metal.Weight,
-                    Quality: pricing.Metal.Quality,
-                    Rate: pricing.Metal.Rate
-                },
-
-                // --- STONES ---
-                Stones: (pricing.Stones || []).map(stone => ({
-                    Type: stone.Type,
-                    Color: stone.Color,
-                    Shape: stone.Shape,
-                    MmSize: stone.MmSize,
-                    SieveSize: stone.SieveSize,
-                    Weight: stone.Weight,
-                    Pcs: stone.Pcs,
-                    CtWeight: stone.CtWeight,
-                    Price: stone.Price,
-                    Markup: stone.Markup || 0
-                }))
-            }];
-
-            asset.Pricing = pricingEntry || null;
+        tableJson = await handleExcelDataForCad(excelFile);
+    } else if (files.images?.length > 0) {
+        const { extractPricingDataFromImage } = require('./imagePricing.service');
+        try {
+            tableJson = await extractPricingDataFromImage(files.images[0].buffer, files.images[0].mimetype);
+        } catch (err) {
+            console.error('[handleCadUpload] LLM extraction failed, skipping pricing:', err);
         }
+    }
+
+    if (tableJson) {
+        tableJson.Stones = tableJson.Stones.map(stone => ({
+            ...stone,
+            Type: enquiry.StoneType,
+            Markup: 0
+        }));
+        tableJson.Metal = {
+            Weight: tableJson.Metal.Weight || null,
+            Quality: enquiry.Metal.Quality || tableJson.Metal.Quality || null,
+        };
+        tableJson.Quantity = enquiry.Quantity || 1;
+
+        let pricing = await exports.calculatePricing(tableJson, enquiry.ClientId);
+
+        asset.Pricing = [{
+            MetalPrice: +pricing.MetalPrice,
+            DiamondsPrice: +pricing.DiamondsPrice,
+            TotalPrice: +pricing.TotalPrice,
+            DutiesAmount: +pricing.DutiesAmount,
+            DiamondWeight: pricing.DiamondWeight,
+            TotalPieces: tableJson.TotalPieces,
+            Loss: pricing.Client.Loss,
+            Labour: pricing.Client.Labour,
+            ExtraCharges: pricing.Client.ExtraCharges,
+            UndercutPrice: pricing.Client.UndercutPrice,
+            NaturalDuties: pricing.Client.NaturalDuties,
+            LabDuties: pricing.Client.LabDuties,
+            GoldDuties: pricing.Client.GoldDuties,
+            SilverAndLabsDuties: pricing.Client.SilverAndLabsDuties,
+            LossAndLabourDuties: pricing.Client.LossAndLabourDuties,
+            ClientPricingMessage: pricing.ClientPricingMessage || null,
+            Metal: {
+                Weight: pricing.Metal.Weight,
+                Quality: pricing.Metal.Quality,
+                Rate: pricing.Metal.Rate
+            },
+            Stones: (pricing.Stones || []).map(stone => ({
+                Type: stone.Type,
+                Color: stone.Color,
+                Shape: stone.Shape,
+                MmSize: stone.MmSize,
+                SieveSize: stone.SieveSize,
+                Weight: stone.Weight,
+                Pcs: stone.Pcs,
+                CtWeight: stone.CtWeight,
+                Price: stone.Price,
+                Markup: stone.Markup || 0
+            }))
+        }];
     }
 
     // Push to the Cad array
