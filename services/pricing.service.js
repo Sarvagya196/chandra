@@ -4,6 +4,8 @@ const OpenAI = require('openai');
 
 const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
 
+const roundIdentifier = "RD";
+
 function normalizeNumber(num) {
     const n = parseFloat(num);
     return isNaN(n) ? num : n.toString();
@@ -68,11 +70,7 @@ async function resolvePricingContext(pricingDetails, clientId) {
 
     if (client) {
         stones = stones.map(stone => {
-            const match = client.Pricing.Diamonds.find(d =>
-                d.Type === stone.Type &&
-                d.Shape === stone.Shape &&
-                normalizeMmSize(d.MmSize) === normalizeMmSize(stone.MmSize)
-            );
+            const match = findStoneMatch(stone, client.Pricing.Diamonds);
 
             return {
                 ...stone,
@@ -91,6 +89,64 @@ async function resolvePricingContext(pricingDetails, clientId) {
         totalPieces: pricingDetails.TotalPieces,
         pricingMessageFormat: client?.PricingMessageFormat || null
     };
+}
+
+function findStoneMatch(stone, pricingDiamonds) {
+    const nonRoundType = "Natural";
+    const isNaturalVariant = stone.Type === "NaturalRegular" || stone.Type === "NaturalLower";
+    const isNonRound = stone.Shape !== roundIdentifier;
+
+    // Helper to parse normalized size to number for comparison
+    const parseSizeValue = (size) => {
+        const normalized = normalizeMmSize(size);
+        return parseFloat(normalized) || 0;
+    };
+
+    const stoneSize = parseSizeValue(stone.MmSize);
+    const stoneWeight = parseFloat(stone.Weight) || 0;
+
+    // Build filter based on type rules
+    const baseFilter = (d) => {
+        const typeMatch = isNaturalVariant && isNonRound 
+            ? d.Type === nonRoundType 
+            : d.Type === stone.Type;
+        
+        return typeMatch && d.Shape === stone.Shape;
+    };
+
+    // First try: Find all matching candidates by mm size >= stone's mm size
+    const sizeCandidates = pricingDiamonds.filter(d => {
+        if (!baseFilter(d)) return false;
+        const dbSize = parseSizeValue(d.MmSize);
+        return dbSize >= stoneSize;
+    });
+
+    // Return the candidate with the smallest size >= stone size (closest threshold)
+    if (sizeCandidates.length > 0) {
+        return sizeCandidates.reduce((closest, current) => {
+            const closestSize = parseSizeValue(closest.MmSize);
+            const currentSize = parseSizeValue(current.MmSize);
+            return currentSize < closestSize ? current : closest;
+        });
+    }
+
+    // Fallback: If no mm size match, try matching by average weight >= stone's weight
+    const weightCandidates = pricingDiamonds.filter(d => {
+        if (!baseFilter(d)) return false;
+        const dbWeight = parseFloat(d.Weight) || 0;
+        return dbWeight >= stoneWeight;
+    });
+
+    // Return the candidate with the smallest weight >= stone weight (closest threshold)
+    if (weightCandidates.length > 0) {
+        return weightCandidates.reduce((closest, current) => {
+            const closestWeight = parseFloat(closest.Weight) || 0;
+            const currentWeight = parseFloat(current.Weight) || 0;
+            return currentWeight < closestWeight ? current : closest;
+        });
+    }
+
+    return null;
 }
 
 
