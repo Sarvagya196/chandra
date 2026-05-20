@@ -142,12 +142,12 @@ exports.createEnquiry = async (data, files = [], userId) => {
 
     // Fire-and-forget: image embedding, auto-assign designer, similar-design search.
     // Best-effort — failures are logged inside the hook and never block the response.
-    queueMicrotask(() => {
-        const { postEnquiryCreateHook } = require('./enquiryAssignment.service');
-        postEnquiryCreateHook(enquiry).catch(err =>
-            console.error('postEnquiryCreateHook failed:', err)
-        );
-    });
+    // queueMicrotask(() => {
+    //     const { postEnquiryCreateHook } = require('./enquiryAssignment.service');
+    //     postEnquiryCreateHook(enquiry).catch(err =>
+    //         console.error('postEnquiryCreateHook failed:', err)
+    //     );
+    // });
 
     return enquiry._id;
 };

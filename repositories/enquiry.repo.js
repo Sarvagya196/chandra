@@ -289,7 +289,9 @@ exports.search = async (searchTerm, filters, sort, pagination) => {
                             Priority: 1,
                             Metal: 1,
                             StoneType: 1,
-                            ShippingDate: 1
+                            ShippingDate: 1,
+                            Remarks: 1,
+                            SpecialRemarks: 1
                             // Note: _id is included by default
                         }
                     }
