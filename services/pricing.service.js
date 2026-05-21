@@ -93,7 +93,7 @@ async function resolvePricingContext(pricingDetails, clientId) {
 
 function findStoneMatch(stone, pricingDiamonds) {
     const nonRoundType = "Natural";
-    const isNaturalVariant = stone.Type === "NaturalRegular" || stone.Type === "NaturalLower";
+    const isNaturalVariant = stone.Type === "NaturalRegular" || stone.Type === "NaturalLower" || stone.Type === "TYPE 1" || stone.Type === "TYPE 2" || stone.Type === "TYPE 3";
     const isNonRound = stone.Shape !== roundIdentifier;
 
     // Helper to parse normalized size to number for comparison
