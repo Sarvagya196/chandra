@@ -139,6 +139,9 @@ exports.search = async (searchTerm, filters, sort, pagination) => {
     if (filters.clientId) {
         matchQuery.ClientId = filters.clientId;
     }
+    if (Array.isArray(filters.clientIds)) {
+        matchQuery.ClientId = { $in: filters.clientIds };
+    }
     // Priority (filterable)
     if (filters.priority) {
         matchQuery.Priority = filters.priority;
@@ -357,7 +360,10 @@ exports.aggregateBy = async (groupBy, filters = {}) => {
     if (filters.clientId) {
         matchStage.ClientId = filters.clientId;
     }
-    
+    if (Array.isArray(filters.clientIds)) {
+        matchStage.ClientId = { $in: filters.clientIds };
+    }
+
     // Add the initial match stage to the pipeline if it has any filters
     if (Object.keys(matchStage).length > 0) {
         pipeline.push({ $match: matchStage });

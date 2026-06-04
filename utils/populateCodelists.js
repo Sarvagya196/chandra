@@ -6,7 +6,8 @@ const Codelist = require('../models/codelists.model'); // Adjust path as necessa
 //         { Id: 1, Code: 'AD', Name: 'Admin' },
 //         { Id: 2, Code: 'CO', Name: 'Coral' },
 //         { Id: 3, Code: 'CD', Name: 'Cad' },
-//         { Id: 4, Code: 'CL', Name: 'Client' }
+//         { Id: 4, Code: 'CL', Name: 'Client' },
+//         { Id: 5, Code: 'CH', Name: 'Client Handler' }
 //     ];
 
 //     try {

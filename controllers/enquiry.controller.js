@@ -155,7 +155,7 @@ exports.getPricing = async (req, res) => {
 exports.getAggregatedCounts = async (req, res) => {
     try {
         // Pass the entire query object (e.g., { groupBy: 'status', assignedTo: 'xyz' })
-        const results = await service.getAggregatedCounts(req.query);
+        const results = await service.getAggregatedCounts(req.query, req.user._id);
         res.json(results);
 
     } catch (error) {
@@ -173,7 +173,7 @@ exports.getAggregatedCounts = async (req, res) => {
 exports.searchEnquiries = async (req, res) => {
     try {
         // Pass all UI query params (e.g., ?search=...&status=...&page=1)
-        const results = await service.searchEnquiries(req.query); 
+        const results = await service.searchEnquiries(req.query, req.user._id);
         res.json(results);
     } catch (error) {
         console.error("Error searching enquiries:", error);
@@ -211,7 +211,7 @@ exports.massActionEnquiries = async (req, res) => {
 exports.exportEnquiriesPdf = async (req, res) => {
     try {
         // Reuse same filters/sort from UI (req.query or req.body — your choice)
-        const pdfBuffer = await service.exportEnquiriesPdf(req.query);
+        const pdfBuffer = await service.exportEnquiriesPdf(req.query, req.user._id);
 
         res.setHeader("Content-Type", "application/pdf");
         res.setHeader(

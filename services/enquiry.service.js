@@ -9,7 +9,16 @@ const xlsx = require('xlsx');
 const codelistsService = require('../services/codelists.service');
 const notificationService = require('../services/notifications.service');
 const reportsService = require('../services/reports.service');
+const userScope = require('./userScope.service');
 const { calculatePricing: pricingCalculate } = require('./pricing.service');
+
+async function scopeClientFilter(queryParams, userId) {
+    const scope = await userScope.getEnquiryScope(userId);
+    const clientFilter = userScope.applyClientScope(queryParams.clientId, scope);
+    const finalParams = { ...queryParams, ...clientFilter };
+    if (clientFilter.clientIds !== undefined) delete finalParams.clientId;
+    return finalParams;
+}
 
 // Best-effort: describe + embed each newly-uploaded image and store in DesignEmbedding.
 // Failures are logged and swallowed — never break the upload path.
@@ -1066,13 +1075,16 @@ async function handleExcelDataForCad(file) {
     };
 }
 
-exports.searchEnquiries = async (queryParams) => {
-    return await searchEnquiriesInternal(queryParams);
+exports.searchEnquiries = async (queryParams, userId) => {
+    const scopedParams = await scopeClientFilter(queryParams, userId);
+    return await searchEnquiriesInternal(scopedParams);
 };
 
-exports.getAggregatedCounts = async (queryParams) => {
+exports.getAggregatedCounts = async (queryParams, userId) => {
+    const scopedParams = await scopeClientFilter(queryParams, userId);
+
     // 1. Separate 'groupBy' from the rest of the filters
-    const { groupBy, ...filters } = queryParams;
+    const { groupBy, ...filters } = scopedParams;
 
     // 2. Validate groupBy
     if (!groupBy) {
@@ -1126,9 +1138,10 @@ exports.massActionEnquiries = async ({ enquiryIds, updateType, newStatus, userId
     }
 };
 
-exports.exportEnquiriesPdf = async (queryParams) => {
+exports.exportEnquiriesPdf = async (queryParams, userId) => {
     const startTime = Date.now();
-    const { reportType = 'enquiries-list', ...userParams } = queryParams || {};
+    const scopedQuery = await scopeClientFilter(queryParams || {}, userId);
+    const { reportType = 'enquiries-list', ...userParams } = scopedQuery;
     const format = reportsService.getFormat(reportType);
 
     // Format's baseFilters override caller filters for the same key
