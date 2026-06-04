@@ -1128,13 +1128,25 @@ exports.massActionEnquiries = async ({ enquiryIds, updateType, newStatus, userId
 
 exports.exportEnquiriesPdf = async (queryParams) => {
     const startTime = Date.now();
-    console.log(`[PDF Export] Starting PDF export with filters:`, queryParams);
-    
-    const data = await searchEnquiriesInternal(queryParams, { noPaging: true });
-    const queryTime = Date.now() - startTime;
-    console.log(`[PDF Export] Fetched ${data.data?.length || 0} enquiries in ${queryTime}ms`);
-    
-    return reportsService.buildEnquiryPdf(data.data);
+    const { reportType = 'enquiries-list', ...userParams } = queryParams || {};
+    const format = reportsService.getFormat(reportType);
+
+    // Format's baseFilters override caller filters for the same key
+    // (e.g. coral-pending always forces status=Coral).
+    const mergedParams = { ...userParams, ...(format.baseFilters || {}) };
+
+    // Apply the format's default sort only when the caller didn't pick one.
+    if (format.defaultSort && !mergedParams.sortBy) {
+        mergedParams.sortBy    = format.defaultSort.field;
+        mergedParams.sortOrder = format.defaultSort.order;
+    }
+
+    console.log(`[PDF Export] reportType=${format.id} filters=`, mergedParams);
+
+    const data = await searchEnquiriesInternal(mergedParams, { noPaging: true });
+    console.log(`[PDF Export] Fetched ${data.data?.length || 0} enquiries in ${Date.now() - startTime}ms`);
+
+    return reportsService.buildReport(format.id, data.data);
 };
 
 async function searchEnquiriesInternal(queryParams, options = {}) {

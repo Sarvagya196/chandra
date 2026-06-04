@@ -22,7 +22,7 @@ function normalizeMmSize(value) {
     return normalizeNumber(value);
 }
 
-async function resolvePricingContext(pricingDetails, clientId) {
+async function resolvePricingContext(pricingDetails, clientId, isRecalculate = false) {
     const todaysMetalRates = await metalPricesService.getLatest();
 
     const metalWeight = parseFloat(pricingDetails.Metal.Weight);
@@ -49,26 +49,37 @@ async function resolvePricingContext(pricingDetails, clientId) {
         console.log(`[pricing] gold rate: ${goldRate}, karat: ${match[1]}, metalRate: ${metalRate}`);
     }
 
-    let client = clientId ? await clientService.getClient(clientId) : null;
+    const client = await clientService.getClient(clientId);
 
-    const duties = {
-        natural: pricingDetails?.NaturalDuties ?? client?.Pricing?.NaturalDuties ?? 0,
-        lab: pricingDetails?.LabDuties ?? client?.Pricing?.LabDuties ?? 0,
-        gold: pricingDetails?.GoldDuties ?? client?.Pricing?.GoldDuties ?? 0,
-        silverAndLab: pricingDetails?.SilverAndLabsDuties ?? client?.Pricing?.SilverAndLabsDuties ?? 0,
-        lossAndLabour: pricingDetails?.LossAndLabourDuties ?? client?.Pricing?.LossAndLabourDuties ?? 0
+    const duties = isRecalculate ? {
+        natural: pricingDetails?.NaturalDuties ?? 0,
+        lab: pricingDetails?.LabDuties ?? 0,
+        gold: pricingDetails?.GoldDuties ?? 0,
+        silverAndLab: pricingDetails?.SilverAndLabsDuties ?? 0,
+        lossAndLabour: pricingDetails?.LossAndLabourDuties ?? 0
+    } : {
+        natural: client?.Pricing?.NaturalDuties ?? pricingDetails?.NaturalDuties ?? 0,
+        lab: client?.Pricing?.LabDuties ?? pricingDetails?.LabDuties ?? 0,
+        gold: client?.Pricing?.GoldDuties ?? pricingDetails?.GoldDuties ?? 0,
+        silverAndLab: client?.Pricing?.SilverAndLabsDuties ?? pricingDetails?.SilverAndLabsDuties ?? 0,
+        lossAndLabour: client?.Pricing?.LossAndLabourDuties ?? pricingDetails?.LossAndLabourDuties ?? 0
     };
 
-    const charges = {
-        loss: pricingDetails?.Loss ?? client?.Pricing?.Loss ?? 0,
-        labour: pricingDetails?.Labour ?? client?.Pricing?.Labour ?? 0,
-        extraCharges: pricingDetails?.ExtraCharges ?? client?.Pricing?.ExtraCharges ?? 0,
-        undercutPrice: pricingDetails?.UndercutPrice ?? client?.Pricing?.UndercutPrice ?? 0
+    const charges = isRecalculate ? {
+        loss: pricingDetails?.Loss ?? 0,
+        labour: pricingDetails?.Labour ?? 0,
+        extraCharges: pricingDetails?.ExtraCharges ?? 0,
+        undercutPrice: pricingDetails?.UndercutPrice ?? 0
+    } : {
+        loss: client?.Pricing?.Loss ?? pricingDetails?.Loss ?? 0,
+        labour: client?.Pricing?.Labour ?? pricingDetails?.Labour ?? 0,
+        extraCharges: client?.Pricing?.ExtraCharges ?? pricingDetails?.ExtraCharges ?? 0,
+        undercutPrice: client?.Pricing?.UndercutPrice ?? pricingDetails?.UndercutPrice ?? 0
     };
 
     let stones = pricingDetails.Stones;
 
-    if (client) {
+    if (!isRecalculate && client) {
         stones = stones.map(stone => {
             const match = findStoneMatch(stone, client.Pricing.Diamonds);
 
@@ -341,8 +352,8 @@ Generate a professional, concise pricing message following the exact format prov
     }
 }
 
-async function calculatePricing(pricingDetails, clientId) {
-    const context = await resolvePricingContext(pricingDetails, clientId);
+async function calculatePricing(pricingDetails, clientId, isRecalculate = false) {
+    const context = await resolvePricingContext(pricingDetails, clientId, isRecalculate);
     const calculation = calculatePricingEngine(context);
     const result = formatPricingResponse(context, calculation);
 

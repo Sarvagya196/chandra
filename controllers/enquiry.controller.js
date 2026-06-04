@@ -140,12 +140,11 @@ exports.getPresignedFileUrl = async (req, res) => {
 
 exports.getPricing = async (req, res) => {
     try {
-        const detailsJson = req.body.details;
+        const { details: detailsJson, clientId, isRecalculate = false } = req.body;
         if (!detailsJson) {
             return res.status(400).json({ message: "Details parameter is required" });
         }
-        const clientId = req.body.clientId;
-        const pricing = await service.calculatePricing(detailsJson, clientId);
+        const pricing = await service.calculatePricing(detailsJson, clientId, isRecalculate);
         res.json(pricing);
     } catch (error) {
         console.error("Error calculating pricing:", error);

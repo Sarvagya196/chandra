@@ -836,10 +836,19 @@ const swaggerSpec = {
             get: {
                 tags: ['Enquiries'],
                 summary: 'Export enquiries as PDF',
+                description: 'Generates a PDF report. The reportType param selects the format — each format has its own column layout and may apply its own base filters on top of the query filters (e.g. coral-pending forces status=Coral). design-approval-pending uses a section-per-client grouped layout.',
                 parameters: [
-                    { in: 'query', name: 'search', schema: { type: 'string' } },
-                    { in: 'query', name: 'status', schema: { type: 'string' } },
+                    { in: 'query', name: 'reportType',
+                      schema: { type: 'string',
+                                enum: ['enquiries-list', 'coral-pending', 'cad-pending', 'design-approval-pending'],
+                                default: 'enquiries-list' },
+                      description: 'Which report format to generate' },
+                    { in: 'query', name: 'search',   schema: { type: 'string' } },
+                    { in: 'query', name: 'status',   schema: { type: 'string' }, description: 'Ignored when the report has its own base status filter' },
                     { in: 'query', name: 'clientId', schema: { type: 'string' } },
+                    { in: 'query', name: 'priority', schema: { type: 'string' } },
+                    { in: 'query', name: 'sortBy',   schema: { type: 'string' }, description: 'Overrides the format default sort' },
+                    { in: 'query', name: 'sortOrder', schema: { type: 'string', enum: ['asc', 'desc'] } },
                 ],
                 responses: {
                     200: { description: 'PDF file', content: { 'application/pdf': {} } },
@@ -909,17 +918,18 @@ const swaggerSpec = {
             post: {
                 tags: ['Enquiries'],
                 summary: 'Calculate pricing for an enquiry',
-                description: 'With clientId, duty rates and stone prices are resolved from Client.Pricing. Without clientId, the caller must supply rates and per-stone Price values in details. Used both on initial Coral/CAD upload (with clientId) and on frontend recalculation after editing the four duty rates (typically without clientId).',
+                description: 'On initial calculation (isRecalculate: false), duty rates and stone prices are resolved from Client.Pricing. On recalculation (isRecalculate: true, used after the user edits duty rates on the frontend), the caller\'s details values are used verbatim and only PricingMessageFormat is read from the client. clientId is always required.',
                 requestBody: {
                     required: true,
                     content: {
                         'application/json': {
                             schema: {
                                 type: 'object',
-                                required: ['details'],
+                                required: ['details', 'clientId'],
                                 properties: {
-                                    details:  { $ref: '#/components/schemas/PricingDetails' },
-                                    clientId: { type: 'string', nullable: true },
+                                    details:       { $ref: '#/components/schemas/PricingDetails' },
+                                    clientId:      { type: 'string' },
+                                    isRecalculate: { type: 'boolean', default: false },
                                 },
                             },
                         },

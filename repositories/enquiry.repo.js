@@ -240,6 +240,27 @@ exports.search = async (searchTerm, filters, sort, pagination) => {
                     }
                 },
                 
+                // Latest quotation message: prefer latest CAD version's last pricing message,
+                // fall back to latest Coral version's last pricing message.
+                LatestQuotation: {
+                    $let: {
+                        vars: {
+                            cadMsg:   { $arrayElemAt: ["$lastCad.Pricing.ClientPricingMessage", -1] },
+                            coralMsg: { $arrayElemAt: ["$lastCoral.Pricing.ClientPricingMessage", -1] }
+                        },
+                        in: {
+                            $cond: [
+                                { $and: [
+                                    { $ne: ["$$cadMsg", null] },
+                                    { $ne: ["$$cadMsg", ""] }
+                                ] },
+                                "$$cadMsg",
+                                "$$coralMsg"
+                            ]
+                        }
+                    }
+                },
+
                 // Complex Image Logic
                 ComputedImages: {
                     $cond: {
@@ -279,6 +300,7 @@ exports.search = async (searchTerm, filters, sort, pagination) => {
                     {
                         $project: {
                             Name: 1,
+                            StyleNumber: 1,
                             Category: 1,
                             CurrentStatus: 1,
                             ClientId: 1,
@@ -291,7 +313,8 @@ exports.search = async (searchTerm, filters, sort, pagination) => {
                             StoneType: 1,
                             ShippingDate: 1,
                             Remarks: 1,
-                            SpecialRemarks: 1
+                            SpecialRemarks: 1,
+                            LatestQuotation: 1
                             // Note: _id is included by default
                         }
                     }
