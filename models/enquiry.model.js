@@ -107,11 +107,12 @@ const enquirySchema = new mongoose.Schema({
     Coral: [{
         Version: String,
         CoralCode: String,
+        Cost: Number,
         Images: [{
             Id: String,
             Key: String,
             Description: String
-        }], 
+        }],
         Excel: {
             Id: String,
             Key: String,
@@ -128,6 +129,7 @@ const enquirySchema = new mongoose.Schema({
     Cad: [{
         Version: String,
         CadCode: String,
+        Cost: Number,
         Images: [{
             Id: String,
             Key: String,

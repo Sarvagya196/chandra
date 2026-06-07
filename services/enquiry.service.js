@@ -375,18 +375,24 @@ exports.updateEnquiry = async (id, data, userId) => {
     return { _id: enquiry._id };
 };
 
-exports.handleAssetUpload = async (id, type, files, version, code, userId) => {
+exports.handleAssetUpload = async (id, type, files, version, code, userId, cost) => {
     const enquiry = await repo.getEnquiryById(id);
     if (!enquiry) throw new Error('Enquiry not found');
+
+    // Normalise cost: accept string ("123") or number, store as Number; null/undefined/empty -> undefined
+    const parsedCost = (cost === undefined || cost === null || cost === '') ? undefined : Number(cost);
+    if (parsedCost !== undefined && Number.isNaN(parsedCost)) {
+        throw new Error('cost must be a valid number');
+    }
 
     // 1) perform the upload with the right handler
     let uploadResult;
     switch (type) {
         case 'coral':
-            uploadResult = await handleCoralUpload(enquiry, files, version, code, userId);
+            uploadResult = await handleCoralUpload(enquiry, files, version, code, userId, parsedCost);
             break;
         case 'cad':
-            uploadResult = await handleCadUpload(enquiry, files, version, code, userId);
+            uploadResult = await handleCadUpload(enquiry, files, version, code, userId, parsedCost);
             break;
         case 'reference':
             uploadResult = await handleReferenceImageUpload(enquiry, files, userId);
@@ -507,6 +513,12 @@ exports.updateAssetData = async (enquiryId, type, version, data, userId) => {
                     updatedCoral.CoralCode = data.CoralCode;
                 }
 
+                if (data.Cost !== undefined && data.Cost !== null && data.Cost !== '') {
+                    const parsedCost = Number(data.Cost);
+                    if (Number.isNaN(parsedCost)) throw new Error('Cost must be a valid number');
+                    updatedCoral.Cost = parsedCost;
+                }
+
                 if (data.Description && data.Id) {
                     updatedCoral.Images = updatedCoral.Images.map(image => {
                         if (image.Id === data.Id) {
@@ -589,6 +601,12 @@ exports.updateAssetData = async (enquiryId, type, version, data, userId) => {
                     updatedCad.CadCode = data.CadCode;
                 }
 
+                if (data.Cost !== undefined && data.Cost !== null && data.Cost !== '') {
+                    const parsedCost = Number(data.Cost);
+                    if (Number.isNaN(parsedCost)) throw new Error('Cost must be a valid number');
+                    updatedCad.Cost = parsedCost;
+                }
+
                 if (data.ShowToClient !== undefined && data.ShowToClient !== null) {
                     updatedCad.ShowToClient = data.ShowToClient;
                     statusEntry = {
@@ -658,7 +676,7 @@ exports.updateAssetData = async (enquiryId, type, version, data, userId) => {
 };
 
 
-async function handleCoralUpload(enquiry, files, version, coralCode, userId) {
+async function handleCoralUpload(enquiry, files, version, coralCode, userId, cost) {
 
     const assetVersion = version || 'Version 1';
     let asset = enquiry.Coral.find(a => a.Version === assetVersion);
@@ -670,8 +688,11 @@ async function handleCoralUpload(enquiry, files, version, coralCode, userId) {
             Excel: null,
             Pricing: null,
             CoralCode: coralCode || '',
+            Cost: cost,
             IsApprovedVersion: false
         };
+    } else if (cost !== undefined) {
+        asset.Cost = cost;
     }
 
     
@@ -799,7 +820,7 @@ async function handleCoralUpload(enquiry, files, version, coralCode, userId) {
     return { _id: enquiry._id };
 }
 
-async function handleCadUpload(enquiry, files, version, cadCode, userId) {
+async function handleCadUpload(enquiry, files, version, cadCode, userId, cost) {
     const assetVersion = version || 'Version 1';
     let asset = enquiry.Cad.find(a => a.Version === assetVersion);
 
@@ -810,8 +831,11 @@ async function handleCadUpload(enquiry, files, version, cadCode, userId) {
             Excel: null,
             Pricing: null,
             CadCode: cadCode || '',
+            Cost: cost,
             IsFinalVersion: false
         };
+    } else if (cost !== undefined) {
+        asset.Cost = cost;
     }
 
     const newCadUploads = [];

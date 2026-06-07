@@ -286,6 +286,7 @@ const swaggerSpec = {
                 properties: {
                     Version:            { type: 'string', example: 'Version 1' },
                     CoralCode:          { type: 'string' },
+                    Cost:               { type: 'number', description: 'Optional fixed cost for this Coral version. Accepted on upload (as form field "cost") and on PUT (as "Cost" in JSON body).' },
                     Images:             { type: 'array', items: { $ref: '#/components/schemas/AssetImage' } },
                     Excel:              { $ref: '#/components/schemas/AssetExcel' },
                     Pricing:            { type: 'array', items: { $ref: '#/components/schemas/PricingSnapshot' } },
@@ -300,6 +301,7 @@ const swaggerSpec = {
                 properties: {
                     Version:            { type: 'string', example: 'Version 1' },
                     CadCode:            { type: 'string' },
+                    Cost:               { type: 'number', description: 'Optional fixed cost for this CAD version. Accepted on upload (as form field "cost") and on PUT (as "Cost" in JSON body).' },
                     Images:             { type: 'array', items: { $ref: '#/components/schemas/AssetImage' } },
                     Excel:              { $ref: '#/components/schemas/AssetExcel' },
                     Pricing:            { type: 'array', items: { $ref: '#/components/schemas/PricingSnapshot' } },
@@ -1093,20 +1095,53 @@ const swaggerSpec = {
                     { in: 'query', name: 'version', schema: { type: 'string' } },
                 ],
                 requestBody: {
-                    content: { 'multipart/form-data': { schema: { type: 'object', properties: { file: { type: 'string', format: 'binary' } } } } },
+                    content: {
+                        'multipart/form-data': {
+                            schema: {
+                                type: 'object',
+                                properties: {
+                                    images:  { type: 'array', items: { type: 'string', format: 'binary' }, description: 'Image files for the version' },
+                                    excel:   { type: 'string', format: 'binary', description: 'Optional pricing excel sheet (coral / cad only)' },
+                                    version: { type: 'string', description: 'Version label, e.g. "Version 1"' },
+                                    code:    { type: 'string', description: 'CoralCode or CadCode for the version' },
+                                    cost:    { type: 'number', description: 'Optional fixed cost for this version (coral / cad only). Stored as Number on the Coral/Cad subdocument.' },
+                                },
+                            },
+                        },
+                    },
                 },
                 responses: { 200: { description: 'Upload result' } },
             },
             put: {
                 tags: ['Enquiries'],
-                summary: 'Update asset metadata (approve, reject, etc.)',
+                summary: 'Update asset metadata (approve, reject, cost, etc.)',
                 parameters: [
                     { in: 'path', name: 'id',   required: true, schema: { type: 'string' } },
                     { in: 'path', name: 'type',  required: true, schema: { type: 'string', enum: ['coral', 'cad', 'reference'] } },
                     { in: 'query', name: 'version', schema: { type: 'string' } },
                 ],
                 requestBody: {
-                    content: { 'application/json': { schema: { type: 'object' } } },
+                    content: {
+                        'application/json': {
+                            schema: {
+                                type: 'object',
+                                description: 'Partial update of a Coral / CAD version. Only the keys you send are applied.',
+                                properties: {
+                                    IsApprovedVersion:  { type: 'boolean', description: 'Coral only — true to approve, false (with ReasonForRejection) to reject' },
+                                    IsFinalVersion:     { type: 'boolean', description: 'CAD only — true to mark as final, false (with ReasonForRejection) to reject' },
+                                    ReasonForRejection: { type: 'string' },
+                                    ShowToClient:       { type: 'boolean' },
+                                    CoralCode:          { type: 'string' },
+                                    CadCode:            { type: 'string' },
+                                    Cost:               { type: 'number', description: 'Update the fixed cost for this Coral / CAD version' },
+                                    Pricing:            { type: 'array', items: { $ref: '#/components/schemas/PricingSnapshot' } },
+                                    Id:                 { type: 'string', description: 'Image Id when updating or deleting a single image within the version' },
+                                    Description:        { type: 'string', description: 'New description for the image identified by Id' },
+                                    Delete:             { type: 'boolean', description: 'When true with Id, deletes a single image; when true without Id, deletes the entire version' },
+                                },
+                            },
+                        },
+                    },
                 },
                 responses: { 200: { description: 'Update result' } },
             },
