@@ -44,6 +44,24 @@ async function indexUploadedAssets({ enquiryId, type, version, uploads }) {
     }
 }
 
+// Best-effort: regenerate the manufacturing checklist for an enquiry from its remarks via Gemini.
+// Failures are logged and swallowed — never block the calling write path.
+async function regenerateChecklist(enquiryId) {
+    try {
+        const enquiry = await repo.getEnquiryById(enquiryId);
+        if (!enquiry) return;
+        const { extractChecklist } = require('./checklistExtraction.service');
+        const checklist = await extractChecklist({
+            remarks: enquiry.Remarks,
+            specialRemarks: enquiry.SpecialRemarks,
+        });
+        if (!checklist) return;
+        await repo.updateChecklist(enquiryId, checklist);
+    } catch (err) {
+        console.error(`[regenerateChecklist] failed for enquiry ${enquiryId}:`, err);
+    }
+}
+
 // Get all enquiries
 exports.getEnquiries = async () => {
     return await repo.getAllEnquiries();
@@ -157,6 +175,8 @@ exports.createEnquiry = async (data, files = [], userId) => {
     //         console.error('postEnquiryCreateHook failed:', err)
     //     );
     // });
+
+    queueMicrotask(() => regenerateChecklist(enquiry._id));
 
     return enquiry._id;
 };
@@ -349,6 +369,8 @@ exports.updateEnquiry = async (id, data, userId) => {
             // Don't fail the update if notification fails
         }
     }
+
+    queueMicrotask(() => regenerateChecklist(enquiry._id));
 
     return { _id: enquiry._id };
 };

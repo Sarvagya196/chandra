@@ -71,6 +71,14 @@ exports.deleteMany = (ids) => {
     return Enquiry.deleteMany({ _id: { $in: ids } });
 };
 
+exports.updateChecklist = async (id, checklist) => {
+  return await Enquiry.findByIdAndUpdate(
+    id,
+    { $set: { Checklist: checklist } },
+    { new: true }
+  );
+};
+
 exports.updateEnquiry = async (id, updatedEnquiry) => {
   // 1️⃣ Fetch existing document
   const existing = await Enquiry.findById(id).lean();
