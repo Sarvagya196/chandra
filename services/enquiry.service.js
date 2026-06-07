@@ -62,6 +62,21 @@ async function regenerateChecklist(enquiryId) {
     }
 }
 
+// Best-effort: regenerate the designer-facing markdown summary from the full enquiry via Gemini.
+// Failures are logged and swallowed — never block the calling write path.
+async function regenerateSummary(enquiryId) {
+    try {
+        const enquiry = await repo.getEnquiryById(enquiryId);
+        if (!enquiry) return;
+        const { generateSummary } = require('./summaryGeneration.service');
+        const summary = await generateSummary(enquiry);
+        if (!summary) return;
+        await repo.updateSummary(enquiryId, summary);
+    } catch (err) {
+        console.error(`[regenerateSummary] failed for enquiry ${enquiryId}:`, err);
+    }
+}
+
 // Get all enquiries
 exports.getEnquiries = async () => {
     return await repo.getAllEnquiries();
@@ -177,6 +192,7 @@ exports.createEnquiry = async (data, files = [], userId) => {
     // });
 
     queueMicrotask(() => regenerateChecklist(enquiry._id));
+    queueMicrotask(() => regenerateSummary(enquiry._id));
 
     return enquiry._id;
 };
@@ -371,6 +387,7 @@ exports.updateEnquiry = async (id, data, userId) => {
     }
 
     queueMicrotask(() => regenerateChecklist(enquiry._id));
+    queueMicrotask(() => regenerateSummary(enquiry._id));
 
     return { _id: enquiry._id };
 };

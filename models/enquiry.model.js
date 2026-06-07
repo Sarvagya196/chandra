@@ -90,6 +90,7 @@ const enquirySchema = new mongoose.Schema({
     Remarks: String,
     SpecialRemarks: String,
     Checklist: { type: ChecklistSchema, default: null },
+    Summary: { type: String, default: null },
     Budget: String,
     ShippingDate: Date,
     ApprovedDate: Date,

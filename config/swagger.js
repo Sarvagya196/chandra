@@ -227,6 +227,7 @@ const swaggerSpec = {
                             Coral: { type: 'array', items: { $ref: '#/components/schemas/CoralVersion' } },
                             Cad:   { type: 'array', items: { $ref: '#/components/schemas/CadVersion' } },
                             Checklist: { $ref: '#/components/schemas/EnquiryChecklist' },
+                            Summary: { type: 'string', nullable: true, description: 'AI-generated designer-facing Markdown summary of the enquiry. Populated asynchronously by Gemini after every POST / PUT — refetch the enquiry to see it.' },
                         },
                     },
                 ],
@@ -1020,7 +1021,7 @@ const swaggerSpec = {
             post: {
                 tags: ['Enquiries'],
                 summary: 'Create a new enquiry (multipart, with reference images)',
-                description: 'Send the enquiry payload as a stringified JSON in the `data` field. Attach up to 10 reference files (images, videos, PDFs — anything) under the `referenceImages` field, each up to 50 MB.\n\nAfter creation, an async hook describes/embeds the reference images, auto-assigns a Coral or Cad designer based on user skills, and populates `SimilarDesigns` on the enquiry. A separate async hook calls Gemini to extract the 9-field jewelry manufacturing `Checklist` from `Remarks` / `SpecialRemarks` and writes it back to the enquiry — fetch the enquiry a few seconds later to see it populated.',
+                description: 'Send the enquiry payload as a stringified JSON in the `data` field. Attach up to 10 reference files (images, videos, PDFs — anything) under the `referenceImages` field, each up to 50 MB.\n\nAfter creation, an async hook describes/embeds the reference images, auto-assigns a Coral or Cad designer based on user skills, and populates `SimilarDesigns` on the enquiry. Two independent async Gemini hooks also run: one extracts the 9-field jewelry manufacturing `Checklist` from `Remarks` / `SpecialRemarks`, the other generates a designer-facing Markdown `Summary` from the full enquiry. Fetch the enquiry a few seconds later to see both populated.',
                 requestBody: {
                     required: true,
                     content: {
@@ -1065,7 +1066,7 @@ const swaggerSpec = {
             put: {
                 tags: ['Enquiries'],
                 summary: 'Update enquiry by ID',
-                description: 'Updates the enquiry and, on every update, fires an async Gemini extraction to regenerate the `Checklist` from the (possibly updated) `Remarks` / `SpecialRemarks`. The HTTP response returns immediately; refetch the enquiry to see the new checklist.',
+                description: 'Updates the enquiry and, on every update, fires two independent async Gemini hooks: one regenerates the `Checklist` from the (possibly updated) `Remarks` / `SpecialRemarks`, the other regenerates the designer-facing Markdown `Summary` from the full enquiry. The HTTP response returns immediately; refetch the enquiry to see the new checklist and summary.',
                 parameters: [{ in: 'path', name: 'id', required: true, schema: { type: 'string' } }],
                 requestBody: {
                     required: true,
