@@ -119,6 +119,25 @@ const swaggerSpec = {
                 },
             },
 
+            // ── Enquiry Checklist ───────────────────────────────────────────
+            EnquiryChecklist: {
+                type: 'object',
+                description: 'Auto-generated jewelry manufacturing checklist extracted from Remarks / SpecialRemarks via Gemini. Populated asynchronously after create/update (fire-and-forget). Fields not mentioned by the customer are returned as the string "NA".',
+                nullable: true,
+                properties: {
+                    Engraving:           { type: 'string', example: 'NA' },
+                    SizeLength:          { type: 'string', example: 'NA' },
+                    SizeRingSize:        { type: 'string', example: 'NA' },
+                    DimensionsThickness: { type: 'string', example: 'NA' },
+                    DeliveryDate:        { type: 'string', example: 'NA' },
+                    EnamelPaintwork:     { type: 'string', example: 'NA' },
+                    RhodiumInstructions: { type: 'string', example: 'NA' },
+                    Components:          { type: 'string', example: 'NA' },
+                    Findings:            { type: 'string', example: 'NA', description: 'A single finding from the customer message, e.g. "Chain - Medium", "Nutpost", "Lock - Handmade". "NA" if not mentioned.' },
+                    GeneratedAt:         { type: 'string', format: 'date-time', description: 'When the checklist was last regenerated' },
+                },
+            },
+
             // ── Enquiry ─────────────────────────────────────────────────────
             EnquiryBase: {
                 type: 'object',
@@ -207,6 +226,7 @@ const swaggerSpec = {
                             },
                             Coral: { type: 'array', items: { $ref: '#/components/schemas/CoralVersion' } },
                             Cad:   { type: 'array', items: { $ref: '#/components/schemas/CadVersion' } },
+                            Checklist: { $ref: '#/components/schemas/EnquiryChecklist' },
                         },
                     },
                 ],
@@ -488,10 +508,14 @@ const swaggerSpec = {
             // ── Image Validation ─────────────────────────────────────────────
             ImageValidationResult: {
                 type: 'object',
-                description: 'LLM-generated comparison of a jewelry image against the enquiry description.',
+                description: 'LLM-generated comparison of a jewelry image against the enquiry description AND the enquiry Checklist.',
                 properties: {
-                    summary:    { type: 'string', description: 'Short paragraph summarising mismatches or confirming alignment' },
-                    issues:     { type: 'array', items: { type: 'string' }, description: 'Bullet-point list of specific mismatches or missing elements. Empty array means no issues found.' },
+                    summary:    { type: 'string', description: 'Short paragraph summarising the overall result' },
+                    issues: {
+                        type: 'array',
+                        items: { type: 'string' },
+                        description: 'Combined list of observations. Each entry is a plain string prefixed with one of two headers followed by " - ":\n• "Checklist Verification - <field> \'<customer value>\': <observation>" — one entry per non-NA checklist item (items that cannot be visually verified, like ring size or delivery date, are explicitly called out).\n• "Design Consistency - <observation>" — general design/metal/stone mismatches. Contains "Design Consistency - No issues found" when there are no design issues.',
+                    },
                     confidence: { type: 'string', enum: ['high', 'medium', 'low'], description: 'LLM confidence in the comparison' },
                 },
                 required: ['summary', 'issues', 'confidence'],
@@ -994,7 +1018,7 @@ const swaggerSpec = {
             post: {
                 tags: ['Enquiries'],
                 summary: 'Create a new enquiry (multipart, with reference images)',
-                description: 'Send the enquiry payload as a stringified JSON in the `data` field. Attach up to 10 reference files (images, videos, PDFs — anything) under the `referenceImages` field, each up to 50 MB.\n\nAfter creation, an async hook describes/embeds the reference images, auto-assigns a Coral or Cad designer based on user skills, and populates `SimilarDesigns` on the enquiry.',
+                description: 'Send the enquiry payload as a stringified JSON in the `data` field. Attach up to 10 reference files (images, videos, PDFs — anything) under the `referenceImages` field, each up to 50 MB.\n\nAfter creation, an async hook describes/embeds the reference images, auto-assigns a Coral or Cad designer based on user skills, and populates `SimilarDesigns` on the enquiry. A separate async hook calls Gemini to extract the 9-field jewelry manufacturing `Checklist` from `Remarks` / `SpecialRemarks` and writes it back to the enquiry — fetch the enquiry a few seconds later to see it populated.',
                 requestBody: {
                     required: true,
                     content: {
@@ -1039,6 +1063,7 @@ const swaggerSpec = {
             put: {
                 tags: ['Enquiries'],
                 summary: 'Update enquiry by ID',
+                description: 'Updates the enquiry and, on every update, fires an async Gemini extraction to regenerate the `Checklist` from the (possibly updated) `Remarks` / `SpecialRemarks`. The HTTP response returns immediately; refetch the enquiry to see the new checklist.',
                 parameters: [{ in: 'path', name: 'id', required: true, schema: { type: 'string' } }],
                 requestBody: {
                     required: true,
@@ -1297,7 +1322,7 @@ const swaggerSpec = {
             post: {
                 tags: ['Image Validation'],
                 summary: 'Validate a jewelry image against an enquiry description',
-                description: 'Fetches the enquiry from the database (source of truth), builds a description from its fields (Category, Metal, StoneType, Remarks, SpecialRemarks), then calls GPT-4o Vision to compare the uploaded image against that description. Returns structured issues and a confidence level. Stateless — no image is stored.',
+                description: 'Fetches the enquiry from the database (source of truth), builds a description from its fields (Category, Metal, StoneType, Remarks, SpecialRemarks) AND every non-NA item from the enquiry `Checklist`, then calls GPT-4o Vision to compare the uploaded image against that description. The model verifies each checklist item explicitly against the image (or marks it as not visually verifiable) and adds general design-consistency observations on top. Returns a flat `issues` array of `Header - point` strings and a confidence level. Stateless — no image is stored.',
                 requestBody: {
                     required: true,
                     content: {
