@@ -331,6 +331,7 @@ async function generatePricingMessage(pricingResponse, pricingMessageFormat) {
     try {
         const res = await openai.chat.completions.create({
             model: process.env.OPENAI_MODEL || 'gpt-4o',
+            temperature: 0,
             messages: [
                 {
                     role: 'system',

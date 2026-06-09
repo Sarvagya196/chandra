@@ -11,6 +11,7 @@ const notificationService = require('../services/notifications.service');
 const reportsService = require('../services/reports.service');
 const userScope = require('./userScope.service');
 const { calculatePricing: pricingCalculate } = require('./pricing.service');
+const { extractPricingDataFromImage } = require('./imagePricing.service');
 
 async function scopeClientFilter(queryParams, userId) {
     const scope = await userScope.getEnquiryScope(userId);
@@ -492,7 +493,7 @@ exports.updateAssetData = async (enquiryId, type, version, data, userId) => {
                     else {
                         updatedCoral.ReasonForRejection = data.ReasonForRejection || "";
                         statusEntry = {
-                            Status: 'Enquiry Created',
+                            Status: 'Coral',
                             Timestamp: new Date(),
                             AssignedTo: enquiry.StatusHistory?.at(-1)?.AssignedTo,
                             AddedBy: userId || 'System',
@@ -592,7 +593,7 @@ exports.updateAssetData = async (enquiryId, type, version, data, userId) => {
                     else {
                         updatedCad.ReasonForRejection = data.ReasonForRejection || "";
                         statusEntry = {
-                            Status: 'Enquiry Created',
+                            Status: 'Cad',
                             Timestamp: new Date(),
                             AssignedTo: enquiry.StatusHistory?.at(-1)?.AssignedTo,
                             AddedBy: userId || 'System',
@@ -739,7 +740,6 @@ async function handleCoralUpload(enquiry, files, version, coralCode, userId, cos
         };
         tableJson = await handleExcelDataForCoral(excelFile);
     } else if (files.images?.length > 0) {
-        const { extractPricingDataFromImage } = require('./imagePricing.service');
         try {
             tableJson = await extractPricingDataFromImage(files.images[0].buffer, files.images[0].mimetype);
         } catch (err) {
