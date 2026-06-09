@@ -3,7 +3,7 @@ const userService = require("../services/user.service");
 const clientService = require("../services/client.service");
 const metalPricesService = require("../services/metalPrices.service");
 const chatService = require('./chat.service');
-const { uploadToS3, generatePresignedUrl } = require('../utils/s3');
+const { uploadToS3, downloadFromS3, generatePresignedUrl } = require('../utils/s3');
 const { v4: uuidv4 } = require('uuid');
 const xlsx = require('xlsx');
 const codelistsService = require('../services/codelists.service');
@@ -636,6 +636,46 @@ exports.updateAssetData = async (enquiryId, type, version, data, userId) => {
 };
 
 
+async function fetchReferenceImageBuffers(enquiry) {
+    const refs = (enquiry.ReferenceImages || []).filter(r => r.Key && r.MimeType && r.MimeType.startsWith('image/'));
+    const results = await Promise.allSettled(refs.map(async r => ({
+        buffer: await downloadFromS3(r.Key),
+        mimeType: r.MimeType
+    })));
+    return results.filter(r => r.status === 'fulfilled').map(r => r.value);
+}
+
+async function extractPricingWithContext(imageBuffer, mimeType, referenceImages) {
+    const { extractPricingDataFromImage, extractionSchema, validateRow, model } = require('./imagePricing.service');
+
+    if (!referenceImages || referenceImages.length === 0) {
+        return extractPricingDataFromImage(imageBuffer, mimeType);
+    }
+
+    const parts = [];
+    parts.push({
+        text: `The following ${referenceImages.length} image(s) are the client's original reference design(s) for this enquiry. Use them as visual context to confirm you are reading the correct CAD sheet — they show the intended jewellery piece.`
+    });
+    for (const ref of referenceImages) {
+        parts.push({ inlineData: { mimeType: ref.mimeType, data: ref.buffer.toString('base64') } });
+    }
+    parts.push({ text: "Now extract the Diamond Specification Table from the CAD sheet below. Ensure 100% accuracy on the PCS column." });
+    parts.push({ inlineData: { mimeType, data: imageBuffer.toString('base64') } });
+
+    const response = await model.generateContent({
+        contents: [{ role: 'user', parts }],
+        generationConfig: {
+            temperature: 0,
+            responseMimeType: "application/json",
+            responseSchema: extractionSchema
+        }
+    });
+
+    const finalData = JSON.parse(response.response.text());
+    finalData.Stones = finalData.Stones.filter(validateRow);
+    return finalData;
+}
+
 async function handleCoralUpload(enquiry, files, version, coralCode, userId) {
 
     const assetVersion = version || 'Version 1';
@@ -679,9 +719,9 @@ async function handleCoralUpload(enquiry, files, version, coralCode, userId) {
         };
         tableJson = await handleExcelDataForCoral(excelFile);
     } else if (files.images?.length > 0) {
-        const { extractPricingDataFromImage } = require('./imagePricing.service');
         try {
-            tableJson = await extractPricingDataFromImage(files.images[0].buffer, files.images[0].mimetype);
+            const referenceImages = await fetchReferenceImageBuffers(enquiry);
+            tableJson = await extractPricingWithContext(files.images[0].buffer, files.images[0].mimetype, referenceImages);
         } catch (err) {
             console.error('[handleCoralUpload] LLM extraction failed, skipping pricing:', err);
         }
@@ -817,9 +857,9 @@ async function handleCadUpload(enquiry, files, version, cadCode, userId) {
         };
         tableJson = await handleExcelDataForCad(excelFile);
     } else if (files.images?.length > 0) {
-        const { extractPricingDataFromImage } = require('./imagePricing.service');
         try {
-            tableJson = await extractPricingDataFromImage(files.images[0].buffer, files.images[0].mimetype);
+            const referenceImages = await fetchReferenceImageBuffers(enquiry);
+            tableJson = await extractPricingWithContext(files.images[0].buffer, files.images[0].mimetype, referenceImages);
         } catch (err) {
             console.error('[handleCadUpload] LLM extraction failed, skipping pricing:', err);
         }

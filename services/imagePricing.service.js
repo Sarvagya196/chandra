@@ -43,7 +43,7 @@ Your task is to extract the Diamond Specification Table exactly as printed.
 CRITICAL INSTRUCTIONS:
 1. Locate the columns: DIA/COL, ST SHAPE, SIEVE SIZE, MM SIZE, AVRG WT, PCS, CT WT.
 2. Do NOT skip any rows.
-3. Read the 'PCS' column vertically with extreme care. 
+3. Read the 'PCS' column vertically with extreme care.
 4. CROSS-CHECK: For every row, ensure that (Pcs * Weight) approximately equals CtWeight. If it doesn't match, you misread a digit. Re-read the PCS and Weight columns.
 5. In the provided image, row 4 (1.10mm size) has exactly 146 PCS. Do not misread this.
 6. Extract Metal quality and weight if present.
@@ -51,7 +51,7 @@ CRITICAL INSTRUCTIONS:
 `;
 
 // Initialize model with System Instructions
-const model = genAI.getGenerativeModel({ 
+const model = genAI.getGenerativeModel({
     model: 'gemini-2.5-flash',
     systemInstruction: SYSTEM_INSTRUCTION
 });
@@ -106,6 +106,9 @@ async function extractPricingDataFromImage(imageBuffer, mimeType) {
 }
 
 exports.extractPricingDataFromImage = extractPricingDataFromImage;
+exports.extractionSchema = extractionSchema;
+exports.validateRow = validateRow;
+exports.model = model;
 
 function validateExtracted(data) {
     if (!data || typeof data !== 'object') throw new Error('LLM returned invalid data');
