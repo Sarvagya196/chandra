@@ -119,6 +119,25 @@ const swaggerSpec = {
                 },
             },
 
+            // ── Enquiry Checklist ───────────────────────────────────────────
+            EnquiryChecklist: {
+                type: 'object',
+                description: 'Auto-generated jewelry manufacturing checklist extracted from Remarks / SpecialRemarks via Gemini. Populated asynchronously after create/update (fire-and-forget). Fields not mentioned by the customer are returned as the string "NA".',
+                nullable: true,
+                properties: {
+                    Engraving:           { type: 'string', example: 'NA' },
+                    SizeLength:          { type: 'string', example: 'NA' },
+                    SizeRingSize:        { type: 'string', example: 'NA' },
+                    DimensionsThickness: { type: 'string', example: 'NA' },
+                    DeliveryDate:        { type: 'string', example: 'NA' },
+                    EnamelPaintwork:     { type: 'string', example: 'NA' },
+                    RhodiumInstructions: { type: 'string', example: 'NA' },
+                    Components:          { type: 'string', example: 'NA' },
+                    Findings:            { type: 'string', example: 'NA', description: 'A single finding from the customer message, e.g. "Chain - Medium", "Nutpost", "Lock - Handmade". "NA" if not mentioned.' },
+                    GeneratedAt:         { type: 'string', format: 'date-time', description: 'When the checklist was last regenerated' },
+                },
+            },
+
             // ── Enquiry ─────────────────────────────────────────────────────
             EnquiryBase: {
                 type: 'object',
@@ -207,6 +226,8 @@ const swaggerSpec = {
                             },
                             Coral: { type: 'array', items: { $ref: '#/components/schemas/CoralVersion' } },
                             Cad:   { type: 'array', items: { $ref: '#/components/schemas/CadVersion' } },
+                            Checklist: { $ref: '#/components/schemas/EnquiryChecklist' },
+                            Summary: { type: 'string', nullable: true, description: 'AI-generated designer-facing Markdown summary of the enquiry. Populated asynchronously by Gemini after every POST / PUT — refetch the enquiry to see it.' },
                         },
                     },
                 ],
@@ -266,6 +287,7 @@ const swaggerSpec = {
                 properties: {
                     Version:            { type: 'string', example: 'Version 1' },
                     CoralCode:          { type: 'string' },
+                    Cost:               { type: 'number', description: 'Optional fixed cost for this Coral version. Accepted on upload (as form field "cost") and on PUT (as "Cost" in JSON body).' },
                     Images:             { type: 'array', items: { $ref: '#/components/schemas/AssetImage' } },
                     Excel:              { $ref: '#/components/schemas/AssetExcel' },
                     Pricing:            { type: 'array', items: { $ref: '#/components/schemas/PricingSnapshot' } },
@@ -280,6 +302,7 @@ const swaggerSpec = {
                 properties: {
                     Version:            { type: 'string', example: 'Version 1' },
                     CadCode:            { type: 'string' },
+                    Cost:               { type: 'number', description: 'Optional fixed cost for this CAD version. Accepted on upload (as form field "cost") and on PUT (as "Cost" in JSON body).' },
                     Images:             { type: 'array', items: { $ref: '#/components/schemas/AssetImage' } },
                     Excel:              { $ref: '#/components/schemas/AssetExcel' },
                     Pricing:            { type: 'array', items: { $ref: '#/components/schemas/PricingSnapshot' } },
@@ -488,10 +511,14 @@ const swaggerSpec = {
             // ── Image Validation ─────────────────────────────────────────────
             ImageValidationResult: {
                 type: 'object',
-                description: 'LLM-generated comparison of a jewelry image against the enquiry description.',
+                description: 'LLM-generated comparison of a jewelry image against the enquiry description AND the enquiry Checklist.',
                 properties: {
-                    summary:    { type: 'string', description: 'Short paragraph summarising mismatches or confirming alignment' },
-                    issues:     { type: 'array', items: { type: 'string' }, description: 'Bullet-point list of specific mismatches or missing elements. Empty array means no issues found.' },
+                    summary:    { type: 'string', description: 'Short paragraph summarising the overall result' },
+                    issues: {
+                        type: 'array',
+                        items: { type: 'string' },
+                        description: 'Combined list of observations. Each entry is a plain string prefixed with one of two headers followed by " - ":\n• "Checklist Verification - <field> \'<customer value>\': <observation>" — one entry per non-NA checklist item (items that cannot be visually verified, like ring size or delivery date, are explicitly called out).\n• "Design Consistency - <observation>" — general design/metal/stone mismatches. Contains "Design Consistency - No issues found" when there are no design issues.',
+                    },
                     confidence: { type: 'string', enum: ['high', 'medium', 'low'], description: 'LLM confidence in the comparison' },
                 },
                 required: ['summary', 'issues', 'confidence'],
@@ -994,7 +1021,7 @@ const swaggerSpec = {
             post: {
                 tags: ['Enquiries'],
                 summary: 'Create a new enquiry (multipart, with reference images)',
-                description: 'Send the enquiry payload as a stringified JSON in the `data` field. Attach up to 10 reference files (images, videos, PDFs — anything) under the `referenceImages` field, each up to 50 MB.\n\nAfter creation, an async hook describes/embeds the reference images, auto-assigns a Coral or Cad designer based on user skills, and populates `SimilarDesigns` on the enquiry.',
+                description: 'Send the enquiry payload as a stringified JSON in the `data` field. Attach up to 10 reference files (images, videos, PDFs — anything) under the `referenceImages` field, each up to 50 MB.\n\nAfter creation, an async hook describes/embeds the reference images, auto-assigns a Coral or Cad designer based on user skills, and populates `SimilarDesigns` on the enquiry. Two independent async Gemini hooks also run: one extracts the 9-field jewelry manufacturing `Checklist` from `Remarks` / `SpecialRemarks`, the other generates a designer-facing Markdown `Summary` from the full enquiry. Fetch the enquiry a few seconds later to see both populated.',
                 requestBody: {
                     required: true,
                     content: {
@@ -1039,6 +1066,7 @@ const swaggerSpec = {
             put: {
                 tags: ['Enquiries'],
                 summary: 'Update enquiry by ID',
+                description: 'Updates the enquiry and, on every update, fires two independent async Gemini hooks: one regenerates the `Checklist` from the (possibly updated) `Remarks` / `SpecialRemarks`, the other regenerates the designer-facing Markdown `Summary` from the full enquiry. The HTTP response returns immediately; refetch the enquiry to see the new checklist and summary.',
                 parameters: [{ in: 'path', name: 'id', required: true, schema: { type: 'string' } }],
                 requestBody: {
                     required: true,
@@ -1068,20 +1096,53 @@ const swaggerSpec = {
                     { in: 'query', name: 'version', schema: { type: 'string' } },
                 ],
                 requestBody: {
-                    content: { 'multipart/form-data': { schema: { type: 'object', properties: { file: { type: 'string', format: 'binary' } } } } },
+                    content: {
+                        'multipart/form-data': {
+                            schema: {
+                                type: 'object',
+                                properties: {
+                                    images:  { type: 'array', items: { type: 'string', format: 'binary' }, description: 'Image files for the version' },
+                                    excel:   { type: 'string', format: 'binary', description: 'Optional pricing excel sheet (coral / cad only)' },
+                                    version: { type: 'string', description: 'Version label, e.g. "Version 1"' },
+                                    code:    { type: 'string', description: 'CoralCode or CadCode for the version' },
+                                    cost:    { type: 'number', description: 'Optional fixed cost for this version (coral / cad only). Stored as Number on the Coral/Cad subdocument.' },
+                                },
+                            },
+                        },
+                    },
                 },
                 responses: { 200: { description: 'Upload result' } },
             },
             put: {
                 tags: ['Enquiries'],
-                summary: 'Update asset metadata (approve, reject, etc.)',
+                summary: 'Update asset metadata (approve, reject, cost, etc.)',
                 parameters: [
                     { in: 'path', name: 'id',   required: true, schema: { type: 'string' } },
                     { in: 'path', name: 'type',  required: true, schema: { type: 'string', enum: ['coral', 'cad', 'reference'] } },
                     { in: 'query', name: 'version', schema: { type: 'string' } },
                 ],
                 requestBody: {
-                    content: { 'application/json': { schema: { type: 'object' } } },
+                    content: {
+                        'application/json': {
+                            schema: {
+                                type: 'object',
+                                description: 'Partial update of a Coral / CAD version. Only the keys you send are applied.',
+                                properties: {
+                                    IsApprovedVersion:  { type: 'boolean', description: 'Coral only — true to approve, false (with ReasonForRejection) to reject' },
+                                    IsFinalVersion:     { type: 'boolean', description: 'CAD only — true to mark as final, false (with ReasonForRejection) to reject' },
+                                    ReasonForRejection: { type: 'string' },
+                                    ShowToClient:       { type: 'boolean' },
+                                    CoralCode:          { type: 'string' },
+                                    CadCode:            { type: 'string' },
+                                    Cost:               { type: 'number', description: 'Update the fixed cost for this Coral / CAD version' },
+                                    Pricing:            { type: 'array', items: { $ref: '#/components/schemas/PricingSnapshot' } },
+                                    Id:                 { type: 'string', description: 'Image Id when updating or deleting a single image within the version' },
+                                    Description:        { type: 'string', description: 'New description for the image identified by Id' },
+                                    Delete:             { type: 'boolean', description: 'When true with Id, deletes a single image; when true without Id, deletes the entire version' },
+                                },
+                            },
+                        },
+                    },
                 },
                 responses: { 200: { description: 'Update result' } },
             },
@@ -1297,7 +1358,7 @@ const swaggerSpec = {
             post: {
                 tags: ['Image Validation'],
                 summary: 'Validate a jewelry image against an enquiry description',
-                description: 'Fetches the enquiry from the database (source of truth), builds a description from its fields (Category, Metal, StoneType, Remarks, SpecialRemarks), then calls GPT-4o Vision to compare the uploaded image against that description. Returns structured issues and a confidence level. Stateless — no image is stored.',
+                description: 'Fetches the enquiry from the database (source of truth), builds a description from its fields (Category, Metal, StoneType, Remarks, SpecialRemarks) AND every non-NA item from the enquiry `Checklist`, then calls **Google Gemini 2.5 Flash** to compare the uploaded image against that description PLUS up to 5 of the enquiry\'s reference attachments (images and/or short videos pulled inline from S3) as visual ground truth. The model verifies each checklist item explicitly against the image (or marks it as not visually verifiable) and adds general design-consistency observations on top, cross-referenced with the customer\'s original attachments. Non-image / non-video reference files (PDFs) and any single attachment over ~20 MB are skipped; the count is mentioned in the prompt so the model knows. Returns a flat `issues` array of `Header - point` strings and a confidence level. Stateless — no image is stored.',
                 requestBody: {
                     required: true,
                     content: {

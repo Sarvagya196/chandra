@@ -93,9 +93,10 @@ exports.uploadAssets = async (req, res) => {
     const version = req.body.version;
     const userId = req.user._id;
     const code = req.body.code; // CadCode or CoralCode
+    const cost = req.body.cost; // Optional numeric cost for this Coral / Cad version
 
     try {
-      const result = await service.handleAssetUpload(id, type, files, version, code, userId);
+      const result = await service.handleAssetUpload(id, type, files, version, code, userId, cost);
       res.status(200).json({ message: 'Upload successful', data: result });
     } catch (err) {
       console.error(err);

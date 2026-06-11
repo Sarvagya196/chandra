@@ -11,6 +11,7 @@ const notificationService = require('../services/notifications.service');
 const reportsService = require('../services/reports.service');
 const userScope = require('./userScope.service');
 const { calculatePricing: pricingCalculate } = require('./pricing.service');
+const { extractPricingDataFromImage } = require('./imagePricing.service');
 
 async function scopeClientFilter(queryParams, userId) {
     const scope = await userScope.getEnquiryScope(userId);
@@ -41,6 +42,39 @@ async function indexUploadedAssets({ enquiryId, type, version, uploads }) {
         } catch (err) {
             console.error(`[indexUploadedAssets] failed for ${type} key ${u.key}:`, err);
         }
+    }
+}
+
+// Best-effort: regenerate the manufacturing checklist for an enquiry from its remarks via Gemini.
+// Failures are logged and swallowed — never block the calling write path.
+async function regenerateChecklist(enquiryId) {
+    try {
+        const enquiry = await repo.getEnquiryById(enquiryId);
+        if (!enquiry) return;
+        const { extractChecklist } = require('./checklistExtraction.service');
+        const checklist = await extractChecklist({
+            remarks: enquiry.Remarks,
+            specialRemarks: enquiry.SpecialRemarks,
+        });
+        if (!checklist) return;
+        await repo.updateChecklist(enquiryId, checklist);
+    } catch (err) {
+        console.error(`[regenerateChecklist] failed for enquiry ${enquiryId}:`, err);
+    }
+}
+
+// Best-effort: regenerate the designer-facing markdown summary from the full enquiry via Gemini.
+// Failures are logged and swallowed — never block the calling write path.
+async function regenerateSummary(enquiryId) {
+    try {
+        const enquiry = await repo.getEnquiryById(enquiryId);
+        if (!enquiry) return;
+        const { generateSummary } = require('./summaryGeneration.service');
+        const summary = await generateSummary(enquiry);
+        if (!summary) return;
+        await repo.updateSummary(enquiryId, summary);
+    } catch (err) {
+        console.error(`[regenerateSummary] failed for enquiry ${enquiryId}:`, err);
     }
 }
 
@@ -157,6 +191,9 @@ exports.createEnquiry = async (data, files = [], userId) => {
     //         console.error('postEnquiryCreateHook failed:', err)
     //     );
     // });
+
+    queueMicrotask(() => regenerateChecklist(enquiry._id));
+    queueMicrotask(() => regenerateSummary(enquiry._id));
 
     return enquiry._id;
 };
@@ -350,21 +387,30 @@ exports.updateEnquiry = async (id, data, userId) => {
         }
     }
 
+    queueMicrotask(() => regenerateChecklist(enquiry._id));
+    queueMicrotask(() => regenerateSummary(enquiry._id));
+
     return { _id: enquiry._id };
 };
 
-exports.handleAssetUpload = async (id, type, files, version, code, userId) => {
+exports.handleAssetUpload = async (id, type, files, version, code, userId, cost) => {
     const enquiry = await repo.getEnquiryById(id);
     if (!enquiry) throw new Error('Enquiry not found');
+
+    // Normalise cost: accept string ("123") or number, store as Number; null/undefined/empty -> undefined
+    const parsedCost = (cost === undefined || cost === null || cost === '') ? undefined : Number(cost);
+    if (parsedCost !== undefined && Number.isNaN(parsedCost)) {
+        throw new Error('cost must be a valid number');
+    }
 
     // 1) perform the upload with the right handler
     let uploadResult;
     switch (type) {
         case 'coral':
-            uploadResult = await handleCoralUpload(enquiry, files, version, code, userId);
+            uploadResult = await handleCoralUpload(enquiry, files, version, code, userId, parsedCost);
             break;
         case 'cad':
-            uploadResult = await handleCadUpload(enquiry, files, version, code, userId);
+            uploadResult = await handleCadUpload(enquiry, files, version, code, userId, parsedCost);
             break;
         case 'reference':
             uploadResult = await handleReferenceImageUpload(enquiry, files, userId);
@@ -447,7 +493,7 @@ exports.updateAssetData = async (enquiryId, type, version, data, userId) => {
                     else {
                         updatedCoral.ReasonForRejection = data.ReasonForRejection || "";
                         statusEntry = {
-                            Status: 'Enquiry Created',
+                            Status: 'Coral',
                             Timestamp: new Date(),
                             AssignedTo: enquiry.StatusHistory?.at(-1)?.AssignedTo,
                             AddedBy: userId || 'System',
@@ -483,6 +529,12 @@ exports.updateAssetData = async (enquiryId, type, version, data, userId) => {
 
                 if (data.CoralCode !== undefined && data.CoralCode !== null) {
                     updatedCoral.CoralCode = data.CoralCode;
+                }
+
+                if (data.Cost !== undefined && data.Cost !== null && data.Cost !== '') {
+                    const parsedCost = Number(data.Cost);
+                    if (Number.isNaN(parsedCost)) throw new Error('Cost must be a valid number');
+                    updatedCoral.Cost = parsedCost;
                 }
 
                 if (data.Description && data.Id) {
@@ -541,7 +593,7 @@ exports.updateAssetData = async (enquiryId, type, version, data, userId) => {
                     else {
                         updatedCad.ReasonForRejection = data.ReasonForRejection || "";
                         statusEntry = {
-                            Status: 'Enquiry Created',
+                            Status: 'Cad',
                             Timestamp: new Date(),
                             AssignedTo: enquiry.StatusHistory?.at(-1)?.AssignedTo,
                             AddedBy: userId || 'System',
@@ -565,6 +617,12 @@ exports.updateAssetData = async (enquiryId, type, version, data, userId) => {
 
                 if (data.CadCode !== undefined && data.CadCode !== null) {
                     updatedCad.CadCode = data.CadCode;
+                }
+
+                if (data.Cost !== undefined && data.Cost !== null && data.Cost !== '') {
+                    const parsedCost = Number(data.Cost);
+                    if (Number.isNaN(parsedCost)) throw new Error('Cost must be a valid number');
+                    updatedCad.Cost = parsedCost;
                 }
 
                 if (data.ShowToClient !== undefined && data.ShowToClient !== null) {
@@ -636,47 +694,7 @@ exports.updateAssetData = async (enquiryId, type, version, data, userId) => {
 };
 
 
-async function fetchReferenceImageBuffers(enquiry) {
-    const refs = (enquiry.ReferenceImages || []).filter(r => r.Key && r.MimeType && r.MimeType.startsWith('image/'));
-    const results = await Promise.allSettled(refs.map(async r => ({
-        buffer: await downloadFromS3(r.Key),
-        mimeType: r.MimeType
-    })));
-    return results.filter(r => r.status === 'fulfilled').map(r => r.value);
-}
-
-async function extractPricingWithContext(imageBuffer, mimeType, referenceImages) {
-    const { extractPricingDataFromImage, extractionSchema, validateRow, model } = require('./imagePricing.service');
-
-    if (!referenceImages || referenceImages.length === 0) {
-        return extractPricingDataFromImage(imageBuffer, mimeType);
-    }
-
-    const parts = [];
-    parts.push({
-        text: `The following ${referenceImages.length} image(s) are the client's original reference design(s) for this enquiry. Use them as visual context to confirm you are reading the correct CAD sheet — they show the intended jewellery piece.`
-    });
-    for (const ref of referenceImages) {
-        parts.push({ inlineData: { mimeType: ref.mimeType, data: ref.buffer.toString('base64') } });
-    }
-    parts.push({ text: "Now extract the Diamond Specification Table from the CAD sheet below. Ensure 100% accuracy on the PCS column." });
-    parts.push({ inlineData: { mimeType, data: imageBuffer.toString('base64') } });
-
-    const response = await model.generateContent({
-        contents: [{ role: 'user', parts }],
-        generationConfig: {
-            temperature: 0,
-            responseMimeType: "application/json",
-            responseSchema: extractionSchema
-        }
-    });
-
-    const finalData = JSON.parse(response.response.text());
-    finalData.Stones = finalData.Stones.filter(validateRow);
-    return finalData;
-}
-
-async function handleCoralUpload(enquiry, files, version, coralCode, userId) {
+async function handleCoralUpload(enquiry, files, version, coralCode, userId, cost) {
 
     const assetVersion = version || 'Version 1';
     let asset = enquiry.Coral.find(a => a.Version === assetVersion);
@@ -688,8 +706,11 @@ async function handleCoralUpload(enquiry, files, version, coralCode, userId) {
             Excel: null,
             Pricing: null,
             CoralCode: coralCode || '',
+            Cost: cost,
             IsApprovedVersion: false
         };
+    } else if (cost !== undefined) {
+        asset.Cost = cost;
     }
 
     
@@ -817,7 +838,7 @@ async function handleCoralUpload(enquiry, files, version, coralCode, userId) {
     return { _id: enquiry._id };
 }
 
-async function handleCadUpload(enquiry, files, version, cadCode, userId) {
+async function handleCadUpload(enquiry, files, version, cadCode, userId, cost) {
     const assetVersion = version || 'Version 1';
     let asset = enquiry.Cad.find(a => a.Version === assetVersion);
 
@@ -828,8 +849,11 @@ async function handleCadUpload(enquiry, files, version, cadCode, userId) {
             Excel: null,
             Pricing: null,
             CadCode: cadCode || '',
+            Cost: cost,
             IsFinalVersion: false
         };
+    } else if (cost !== undefined) {
+        asset.Cost = cost;
     }
 
     const newCadUploads = [];

@@ -71,6 +71,22 @@ exports.deleteMany = (ids) => {
     return Enquiry.deleteMany({ _id: { $in: ids } });
 };
 
+exports.updateChecklist = async (id, checklist) => {
+  return await Enquiry.findByIdAndUpdate(
+    id,
+    { $set: { Checklist: checklist } },
+    { new: true }
+  );
+};
+
+exports.updateSummary = async (id, summary) => {
+  return await Enquiry.findByIdAndUpdate(
+    id,
+    { $set: { Summary: summary } },
+    { new: true }
+  );
+};
+
 exports.updateEnquiry = async (id, updatedEnquiry) => {
   // 1️⃣ Fetch existing document
   const existing = await Enquiry.findById(id).lean();
@@ -317,6 +333,8 @@ exports.search = async (searchTerm, filters, sort, pagination) => {
                             ShippingDate: 1,
                             Remarks: 1,
                             SpecialRemarks: 1,
+                            Checklist: 1,
+                            Summary: 1,
                             LatestQuotation: 1
                             // Note: _id is included by default
                         }

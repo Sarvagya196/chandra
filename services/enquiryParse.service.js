@@ -7,13 +7,13 @@ const client = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
 // ─── Required fields per media type ─────────────────────────────────────────
 // These are the fields that MUST be populated; anything missing becomes a missingField entry.
 const REQUIRED_BY_STATUS = {
-    coral:        ['Name', 'ClientId', 'Category', 'Priority', 'Metal.Color', 'Remarks'],
+    coral:        ['Name', 'ClientId', 'Category', 'Priority', 'Metal.Color', 'Metal.Quality', 'StoneType', 'Remarks'],
     cad:          ['Name', 'ClientId', 'Category', 'Priority', 'Metal.Color', 'Metal.Quality', 'StoneType', 'Remarks'],
     approved_cad: ['Name', 'ClientId', 'Category', 'Priority', 'Metal.Color', 'Metal.Quality', 'StoneType', 'Remarks'],
 };
 
 // ─── Static option lists ─────────────────────────────────────────────────────
-const CATEGORY_OPTIONS = ['Ring', 'Bracelet', 'Necklace', 'Earrings', 'Pendant', 'Bangle', 'Other'];
+const CATEGORY_OPTIONS = ['Ring', 'Bracelet', 'Necklace', 'Earrings', 'Pendant', 'Other'];
 const PRIORITY_OPTIONS  = ['Medium', 'High', 'Super High'];
 const METAL_COLOR_OPTIONS   = ['Yellow Gold', 'White Gold', 'Rose Gold', 'Two Tone Rose White Gold', 'Two Tone Yellow White Gold'];
 const METAL_QUALITY_OPTIONS = ['10K', '14K', '18K', '22K', '24K', 'Silver 925', 'Platinum'];
