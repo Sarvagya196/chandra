@@ -228,7 +228,7 @@ exports.updateEnquiry = async (id, data, userId) => {
         'Priority', 'Metal', 'Category', 'StoneType',
         'MetalWeight', 'DiamondWeight', 'Stamping',
         'Remarks', 'ShippingDate', 'Budget', 'SpecialRemarks',
-        'ApprovedDate', 'GatiOrderNumber', 'Checklist',
+        'ApprovedDate', 'GatiOrderNumber', 'Checklist'
     ];
 
     const updatedFields = {};
