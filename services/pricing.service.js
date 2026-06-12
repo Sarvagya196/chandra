@@ -336,7 +336,7 @@ async function generatePricingMessage(pricingResponse, pricingMessageFormat) {
                 {
                     role: 'system',
                     content: `You are a jewellery pricing message formatter. Format the pricing details according to the client's specified format template.
-The format template may include placeholders like {TotalPrice}$, {MetalPrice}$, {DiamondsPrice}$, {DutiesAmount}$, {DiamondWeight} carats, {TotalPieces}, etc.
+The format template may include placeholders like {TotalPrice}$, {MetalPrice}$, {DiamondsPrice}$, {DutiesAmount}$, {DiamondWeight}, {TotalPieces}, etc.
 Generate a professional, concise pricing message following the exact format provided.`,
                 },
                 {
