@@ -13,6 +13,16 @@ const userScope = require('./userScope.service');
 const { calculatePricing: pricingCalculate } = require('./pricing.service');
 const { extractPricingDataFromImage } = require('./imagePricing.service');
 
+// 'Quotation Review' only when pricing is complete; else 'Cost Missing'.
+function deriveCostSubStatus(asset) {
+    const p = Array.isArray(asset?.Pricing) ? asset.Pricing[0] : null;
+    if (!p) return 'Cost Missing';
+    const stones = p.Stones || [];
+    const stonesPriced = stones.length > 0 && stones.every(s => Number(s.Price) > 0);
+    const metalRate = Number(p.Metal?.Rate) > 0;
+    return (stonesPriced && metalRate) ? 'Quotation Review' : 'Cost Missing';
+}
+
 async function scopeClientFilter(queryParams, userId) {
     const scope = await userScope.getEnquiryScope(userId);
     const clientFilter = userScope.applyClientScope(queryParams.clientId, scope);
@@ -296,8 +306,14 @@ exports.updateEnquiry = async (id, data, userId) => {
     }
 
     if (changes.length > 0) {
+        // SubStatus only applies while in the Coral/Cad phase.
+        let subStatus = null;
+        if (data.Status === 'Coral' || data.Status === 'Cad') {
+            subStatus = (data.AssignedTo && String(data.AssignedTo).trim()) ? 'Assigned' : 'Assign Pending';
+        }
         const statusEntry = {
             Status: data.Status,
+            SubStatus: subStatus,
             Timestamp: new Date(),
             AssignedTo: data.AssignedTo,
             AddedBy: userId || 'System',
@@ -484,6 +500,7 @@ exports.updateAssetData = async (enquiryId, type, version, data, userId) => {
                     if (data.IsApprovedVersion === true) {
                         statusEntry = {
                             Status: 'Cad',
+                            SubStatus: 'Assign Pending',
                             Timestamp: new Date(),
                             AssignedTo: null,
                             AddedBy: userId || 'System',
@@ -494,6 +511,7 @@ exports.updateAssetData = async (enquiryId, type, version, data, userId) => {
                         updatedCoral.ReasonForRejection = data.ReasonForRejection || "";
                         statusEntry = {
                             Status: 'Coral',
+                            SubStatus: 'Rejected - Redo',
                             Timestamp: new Date(),
                             AssignedTo: enquiry.StatusHistory?.at(-1)?.AssignedTo,
                             AddedBy: userId || 'System',
@@ -507,6 +525,7 @@ exports.updateAssetData = async (enquiryId, type, version, data, userId) => {
                     updatedCoral.Pricing = data.Pricing;
                     statusEntry = {
                         Status: enquiry.StatusHistory?.at(-1)?.Status,
+                        SubStatus: deriveCostSubStatus(updatedCoral),
                         Timestamp: new Date(),
                         AssignedTo: enquiry.StatusHistory?.at(-1)?.AssignedTo,
                         AddedBy: userId || 'System',
@@ -515,14 +534,14 @@ exports.updateAssetData = async (enquiryId, type, version, data, userId) => {
                     enquiry.StatusHistory.push(statusEntry);
                 }
 
-                if (data.ShowToClient !== undefined && data.ShowToClient !== null) {
-                    updatedCoral.ShowToClient = data.ShowToClient;
+                if (data.SendForApproval === true) {
                     statusEntry = {
                         Status: 'Design Approval Pending',
+                        SubStatus: null,
                         Timestamp: new Date(),
                         AssignedTo: enquiry.StatusHistory?.at(-1)?.AssignedTo,
                         AddedBy: userId || 'System',
-                        Details: "Approval pending for coral" ?? ""
+                        Details: "Sent for design approval"
                     };
                     enquiry.StatusHistory.push(statusEntry);
                 }
@@ -555,6 +574,7 @@ exports.updateAssetData = async (enquiryId, type, version, data, userId) => {
                         // Move status back to in progress because in 10 mins designer deleted it
                         statusEntry = {
                             Status: 'Coral',
+                            SubStatus: 'Assigned',
                             Timestamp: new Date(),
                             AssignedTo: enquiry.StatusHistory?.at(-1)?.AssignedTo,
                             AddedBy: userId || 'System',
@@ -584,6 +604,7 @@ exports.updateAssetData = async (enquiryId, type, version, data, userId) => {
                         updatedCad.IsFinalVersion = data.IsFinalVersion;
                         statusEntry = {
                             Status: 'Order Placement',
+                            SubStatus: null,
                             Timestamp: new Date(),
                             AssignedTo: null,
                             AddedBy: userId || 'System',
@@ -594,6 +615,7 @@ exports.updateAssetData = async (enquiryId, type, version, data, userId) => {
                         updatedCad.ReasonForRejection = data.ReasonForRejection || "";
                         statusEntry = {
                             Status: 'Cad',
+                            SubStatus: 'Rejected - Redo',
                             Timestamp: new Date(),
                             AssignedTo: enquiry.StatusHistory?.at(-1)?.AssignedTo,
                             AddedBy: userId || 'System',
@@ -607,6 +629,7 @@ exports.updateAssetData = async (enquiryId, type, version, data, userId) => {
                     updatedCad.Pricing = data.Pricing;
                     statusEntry = {
                         Status: enquiry.StatusHistory?.at(-1)?.Status,
+                        SubStatus: deriveCostSubStatus(updatedCad),
                         Timestamp: new Date(),
                         AssignedTo: enquiry.StatusHistory?.at(-1)?.AssignedTo,
                         AddedBy: userId || 'System',
@@ -625,14 +648,14 @@ exports.updateAssetData = async (enquiryId, type, version, data, userId) => {
                     updatedCad.Cost = parsedCost;
                 }
 
-                if (data.ShowToClient !== undefined && data.ShowToClient !== null) {
-                    updatedCad.ShowToClient = data.ShowToClient;
+                if (data.SendForApproval === true) {
                     statusEntry = {
                         Status: 'Design Approval Pending',
+                        SubStatus: null,
                         Timestamp: new Date(),
                         AssignedTo: enquiry.StatusHistory?.at(-1)?.AssignedTo,
                         AddedBy: userId || 'System',
-                        Details: "Approval pending for cad" ?? ""
+                        Details: "Sent for design approval"
                     };
                     enquiry.StatusHistory.push(statusEntry);
                 }
@@ -653,7 +676,8 @@ exports.updateAssetData = async (enquiryId, type, version, data, userId) => {
                         //delete entire version
                         enquiry.Cad.splice(cadIndex, 1);
                         statusEntry = {
-                            Status: 'CAD',
+                            Status: 'Cad',
+                            SubStatus: 'Assigned',
                             Timestamp: new Date(),
                             AssignedTo: enquiry.StatusHistory?.at(-1)?.AssignedTo,
                             AddedBy: userId || 'System',
@@ -811,7 +835,8 @@ async function handleCoralUpload(enquiry, files, version, coralCode, userId, cos
 
     // Add a status history entry for Coral upload
     const statusEntry = {
-        Status: 'Quotation',
+        Status: 'Coral',
+        SubStatus: deriveCostSubStatus(asset),
         Timestamp: new Date(),
         AddedBy: userId,
         Details: `Coral Version ${asset.Version} uploaded`
@@ -950,7 +975,8 @@ async function handleCadUpload(enquiry, files, version, cadCode, userId, cost) {
 
     // Add a status history entry for Cad upload
     const statusEntry = {
-        Status: 'Quotation',
+        Status: 'Cad',
+        SubStatus: deriveCostSubStatus(asset),
         Timestamp: new Date(),
         AddedBy: userId, // User ID from JWT token
         Details: `CAD Version ${asset.Version} uploaded`
@@ -1151,9 +1177,9 @@ exports.getAggregatedCounts = async (queryParams, userId) => {
 
     // 2. Validate groupBy
     if (!groupBy) {
-        throw new Error("Missing 'groupBy' query parameter. Try 'status' or 'client'.");
+        throw new Error("Missing 'groupBy' query parameter. Try 'status', 'client', or 'buckets'.");
     }
-    const allowedTypes = ['status', 'client'];
+    const allowedTypes = ['status', 'client', 'buckets'];
     if (!allowedTypes.includes(groupBy)) {
         throw new Error("Invalid aggregation type. Must be one of: " + allowedTypes.join(', '));
     }

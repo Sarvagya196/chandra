@@ -8,8 +8,7 @@ module.exports = {
   id: 'cad-pending',
   title: 'CAD Pending Report',
   layout: 'table',
-  // 'Cad' and 'CAD' both appear in the data — accept both.
-  baseFilters: { status: ['CAD', 'Cad'] },
+  baseFilters: { status: 'Cad' },
   defaultSort: { field: 'AssignedDate', order: 'asc' },
   rowHeight: 80,
   headerRowHeight: 24,

@@ -64,6 +64,7 @@ const enquirySchema = new mongoose.Schema({
     ClientId: { type: String, ref: 'Client' },
     StatusHistory: [{
         Status: String,
+        SubStatus: { type: String, default: null },
         Timestamp: Date,
         AssignedTo: String,
         Details: String,
@@ -122,7 +123,6 @@ const enquirySchema = new mongoose.Schema({
         Pricing: {
             type: [PricingSchema]
         },
-        ShowToClient: Boolean,
         IsApprovedVersion: Boolean,
         ReasonForRejection: String,
         CreatedDate: { type: Date, default: Date.now }
@@ -144,7 +144,6 @@ const enquirySchema = new mongoose.Schema({
         Pricing: {
             type: [PricingSchema]
         },
-        ShowToClient: Boolean,
         IsFinalVersion: Boolean,
         ReasonForRejection: String,
         CreatedDate: { type: Date, default: Date.now }

@@ -44,17 +44,12 @@ const Codelist = require('../models/codelists.model'); // Adjust path as necessa
 //         {
 //             "Id": 7,
 //             "Code": "CD",
-//             "Name": "CAD"
+//             "Name": "Cad"
 //         },
 //         {
 //             "Id": 10,
 //             "Code": "AC",
 //             "Name": "Approved Cad"
-//         },
-//         {
-//             "Id": 12,
-//             "Code": "QT",
-//             "Name": "Quotation"
 //         },
 //         {
 //             "Id": 13,
@@ -130,3 +125,29 @@ const Codelist = require('../models/codelists.model'); // Adjust path as necessa
 // }
 
 // exports.createStoneTypesCodelist = createStoneTypesCodelist;
+
+// L2 sub-statuses under the Coral/Cad phase. Run once, then comment out.
+async function createSubStatusCodelist() {
+    const subStatusValues = [
+        { Id: 1, Code: 'AP', Name: 'Assign Pending' },
+        { Id: 2, Code: 'AS', Name: 'Assigned' },
+        { Id: 3, Code: 'RR', Name: 'Rejected - Redo' },
+        { Id: 4, Code: 'DS', Name: 'Design Submitted' },
+        { Id: 5, Code: 'CM', Name: 'Cost Missing' },
+        { Id: 6, Code: 'QR', Name: 'Quotation Review' },
+    ];
+
+    try {
+        const newCodelist = new Codelist({
+            Type: 'SubStatus',
+            Values: subStatusValues
+        });
+
+        const result = await newCodelist.save();
+        console.log("Successfully created Codelist for 'SubStatus':", result);
+    } catch (err) {
+        console.error("Error creating SubStatus Codelist:", err);
+    }
+}
+
+exports.createSubStatusCodelist = createSubStatusCodelist;
