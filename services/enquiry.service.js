@@ -483,7 +483,7 @@ exports.updateAssetData = async (enquiryId, type, version, data, userId) => {
                     updatedCoral.IsApprovedVersion = data.IsApprovedVersion;
                     if (data.IsApprovedVersion === true) {
                         statusEntry = {
-                            Status: 'Approved Cad',
+                            Status: 'Cad',
                             Timestamp: new Date(),
                             AssignedTo: null,
                             AddedBy: userId || 'System',
@@ -583,7 +583,7 @@ exports.updateAssetData = async (enquiryId, type, version, data, userId) => {
                     if (data.IsFinalVersion === true) {
                         updatedCad.IsFinalVersion = data.IsFinalVersion;
                         statusEntry = {
-                            Status: 'Approved Cad',
+                            Status: 'Order Placement',
                             Timestamp: new Date(),
                             AssignedTo: null,
                             AddedBy: userId || 'System',

@@ -30,7 +30,7 @@ exports.getEnquiriesByUserId = async (userId) => {
     ]);
 };
 
-const ACTIVE_STATUSES = ['Coral', 'Cad', 'Approved Cad'];
+const ACTIVE_STATUSES = ['Coral', 'Cad'];
 
 exports.countActiveEnquiriesByDesigners = async (designerIds) => {
     const results = await Enquiry.aggregate([
@@ -357,7 +357,6 @@ const AGGREGATE_CLIENT_STATUSES = [
     "Enquiry Created",
     "Coral",
     "CAD",
-    "Approved Cad",
     "Quotation",
 ];
 

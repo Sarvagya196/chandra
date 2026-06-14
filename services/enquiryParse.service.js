@@ -149,7 +149,7 @@ exports.parseEnquiryMessage = async ({ message, mediaType }) => {
     }
 
     // Attach Status for downstream createEnquiry
-    const STATUS_MAP = { coral: 'Coral', cad: 'Cad', approved_cad: 'Approved Cad' };
+    const STATUS_MAP = { coral: 'Coral', cad: 'Cad'};
     parsed.Status = STATUS_MAP[normalizedStatus] || 'Coral';
 
     const missingFields = buildMissingFields(parsed, requiredFields, optionsMap);
