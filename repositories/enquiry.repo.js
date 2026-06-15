@@ -30,7 +30,7 @@ exports.getEnquiriesByUserId = async (userId) => {
     ]);
 };
 
-const ACTIVE_STATUSES = ['Coral', 'Cad', 'Approved Cad'];
+const ACTIVE_STATUSES = ['Coral', 'Cad'];
 
 exports.countActiveEnquiriesByDesigners = async (designerIds) => {
     const results = await Enquiry.aggregate([
@@ -191,6 +191,16 @@ exports.search = async (searchTerm, filters, sort, pagination) => {
             $in: Array.isArray(filters.status) ? filters.status : [filters.status]
         };
     }
+    // SubStatus (filterable) — supports single or multi
+    if (filters.subStatus?.length) {
+        postMatchQuery.CurrentSubStatus = {
+            $in: Array.isArray(filters.subStatus) ? filters.subStatus : [filters.subStatus]
+        };
+    }
+    // Unassigned (filterable) — no user on the latest status entry
+    if (filters.unassigned === true || filters.unassigned === 'true') {
+        postMatchQuery.AssignedTo = { $in: [null, undefined, ''] };
+    }
     // AssignedTo (filterable)
     if (filters.assignedTo) {
         postMatchQuery.AssignedTo = filters.assignedTo;
@@ -244,6 +254,7 @@ exports.search = async (searchTerm, filters, sort, pagination) => {
             $addFields: {
                 // Fields for filtering/sorting
                 CurrentStatus: "$lastStatus.Status",
+                CurrentSubStatus: "$lastStatus.SubStatus",
                 AssignedTo: "$lastStatus.AssignedTo",
                 AssignedDate: "$lastStatus.Timestamp",
                 CreatedDate: "$firstStatus.Timestamp",
@@ -322,6 +333,7 @@ exports.search = async (searchTerm, filters, sort, pagination) => {
                             StyleNumber: 1,
                             Category: 1,
                             CurrentStatus: 1,
+                            CurrentSubStatus: 1,
                             ClientId: 1,
                             ReferenceImages: "$ComputedImages",
                             AssignedTo: 1,
@@ -356,9 +368,7 @@ exports.search = async (searchTerm, filters, sort, pagination) => {
 const AGGREGATE_CLIENT_STATUSES = [
     "Enquiry Created",
     "Coral",
-    "CAD",
-    "Approved Cad",
-    "Quotation",
+    "Cad",
 ];
 
 
@@ -389,7 +399,7 @@ exports.aggregateBy = async (groupBy, filters = {}) => {
 
     // --- 2. Build Grouping & Computed Field Logic ---
     let groupStage = {};
-    let needsAssignedTo = !!filters.assignedTo || (groupBy === 'status' && filters.assignedTo);
+    let needsAssignedTo = !!filters.assignedTo || (groupBy === 'status' && filters.assignedTo) || groupBy === 'buckets';
 
     // We must compute fields *before* we can filter on them
     const fieldsToAdd = {};    
@@ -415,6 +425,35 @@ exports.aggregateBy = async (groupBy, filters = {}) => {
     }
 
     // --- 4. Define Group Stage ---
+    // Special-case: 'buckets' returns the 3 dashboard counts in one $facet pass.
+    if (groupBy === 'buckets') {
+        pipeline.push({
+            $facet: {
+                unassigned: [
+                    { $match: { AssignedTo: { $in: [null, undefined, ''] } } },
+                    { $count: 'count' }
+                ],
+                wip: [
+                    { $match: { CurrentStatus: { $in: ['Coral', 'Cad'] } } },
+                    { $count: 'count' }
+                ],
+                approvalPending: [
+                    { $match: { CurrentStatus: 'Design Approval Pending' } },
+                    { $count: 'count' }
+                ]
+            }
+        });
+        pipeline.push({
+            $project: {
+                unassigned:      { $ifNull: [{ $arrayElemAt: ['$unassigned.count', 0] }, 0] },
+                wip:             { $ifNull: [{ $arrayElemAt: ['$wip.count', 0] }, 0] },
+                approvalPending: { $ifNull: [{ $arrayElemAt: ['$approvalPending.count', 0] }, 0] }
+            }
+        });
+        const bucketResult = await Enquiry.aggregate(pipeline);
+        return bucketResult[0] || { unassigned: 0, wip: 0, approvalPending: 0 };
+    }
+
     switch (groupBy) {
         case 'status':
             groupStage = {

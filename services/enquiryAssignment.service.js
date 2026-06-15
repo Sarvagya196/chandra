@@ -10,8 +10,7 @@ const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
 
 const STATUS_TO_ROLE_CODE = {
     'Coral': 'CO',
-    'Cad': 'CD',
-    'Approved Cad': 'CD',
+    'Cad': 'CD'
 };
 
 async function resolveRoleId(roleCode) {

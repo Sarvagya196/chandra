@@ -193,6 +193,7 @@ const swaggerSpec = {
                                     type: 'object',
                                     properties: {
                                         Status:     { type: 'string' },
+                                        SubStatus:  { type: 'string', nullable: true, description: 'L2 stage within the Coral/Cad phase: Assign Pending, Assigned, Rejected - Redo, Design Submitted, Cost Missing, Quotation Review. Null outside Coral/Cad.' },
                                         Timestamp:  { type: 'string', format: 'date-time' },
                                         AssignedTo: { type: 'string' },
                                         Details:    { type: 'string' },
@@ -291,7 +292,6 @@ const swaggerSpec = {
                     Images:             { type: 'array', items: { $ref: '#/components/schemas/AssetImage' } },
                     Excel:              { $ref: '#/components/schemas/AssetExcel' },
                     Pricing:            { type: 'array', items: { $ref: '#/components/schemas/PricingSnapshot' } },
-                    ShowToClient:       { type: 'boolean' },
                     IsApprovedVersion:  { type: 'boolean' },
                     ReasonForRejection: { type: 'string' },
                     CreatedDate:        { type: 'string', format: 'date-time' },
@@ -306,7 +306,6 @@ const swaggerSpec = {
                     Images:             { type: 'array', items: { $ref: '#/components/schemas/AssetImage' } },
                     Excel:              { $ref: '#/components/schemas/AssetExcel' },
                     Pricing:            { type: 'array', items: { $ref: '#/components/schemas/PricingSnapshot' } },
-                    ShowToClient:       { type: 'boolean' },
                     IsFinalVersion:     { type: 'boolean' },
                     ReasonForRejection: { type: 'string' },
                     CreatedDate:        { type: 'string', format: 'date-time' },
@@ -890,6 +889,7 @@ const swaggerSpec = {
                     { in: 'query', name: 'search',            schema: { type: 'string' }, description: 'Full-text search across Name, StyleNumber, CoralCode, CadCode, GatiOrderNumber, Stamping, Remarks, SpecialRemarks' },
                     { in: 'query', name: 'id',                schema: { type: 'string' }, description: 'Comma-separated list of enquiry ObjectIds' },
                     { in: 'query', name: 'status',            schema: { oneOf: [{ type: 'string' }, { type: 'array', items: { type: 'string' } }] }, description: 'Single status or array of statuses (computed from last StatusHistory entry)' },
+                    { in: 'query', name: 'subStatus',         schema: { oneOf: [{ type: 'string' }, { type: 'array', items: { type: 'string' } }] }, description: 'Single sub-status or array (computed from last StatusHistory entry). E.g. Assign Pending, Assigned, Rejected - Redo, Design Submitted, Cost Missing, Quotation Review' },
                     { in: 'query', name: 'clientId',          schema: { type: 'string' } },
                     { in: 'query', name: 'category',          schema: { type: 'string' } },
                     { in: 'query', name: 'priority',          schema: { type: 'string', enum: ['Normal', 'High', 'Super High'] } },
@@ -897,6 +897,7 @@ const swaggerSpec = {
                     { in: 'query', name: 'metalQuality',      schema: { type: 'string' } },
                     { in: 'query', name: 'stoneType',         schema: { type: 'string' } },
                     { in: 'query', name: 'assignedTo',        schema: { type: 'string' }, description: 'User ID currently assigned (last StatusHistory entry)' },
+                    { in: 'query', name: 'unassigned',        schema: { type: 'boolean' }, description: 'When true, returns only enquiries whose last StatusHistory entry has no AssignedTo (null / missing / empty). Overridden if assignedTo is also passed.' },
                     { in: 'query', name: 'shippingDateFrom',  schema: { type: 'string', format: 'date-time' } },
                     { in: 'query', name: 'shippingDateTo',    schema: { type: 'string', format: 'date-time' } },
                     { in: 'query', name: 'assignedDateFrom',  schema: { type: 'string', format: 'date-time' } },
@@ -931,13 +932,45 @@ const swaggerSpec = {
             get: {
                 tags: ['Enquiries'],
                 summary: 'Get aggregated enquiry counts',
+                description: 'Returns counts grouped by the chosen dimension.\n\n- `groupBy=status` → `[{ name, count }]` per current status.\n- `groupBy=client` → `[{ name, count }]` per ClientId (restricted to Enquiry Created, Coral, CAD).\n- `groupBy=buckets` → dashboard counts in a single object: `{ unassigned, wip, approvalPending }`. WIP = Coral / Cad; Unassigned = latest status has no AssignedTo; Approval Pending = status "Design Approval Pending".',
                 parameters: [
-                    { in: 'query', name: 'groupBy', required: true, schema: { type: 'string' }, example: 'status' },
-                    { in: 'query', name: 'clientId', schema: { type: 'string' } },
+                    { in: 'query', name: 'groupBy', required: true, schema: { type: 'string', enum: ['status', 'client', 'buckets'] }, example: 'buckets' },
+                    { in: 'query', name: 'clientId', schema: { type: 'string' }, description: 'Optional — scopes all counts to a single client' },
+                    { in: 'query', name: 'assignedTo', schema: { type: 'string' }, description: 'Optional — scopes counts to a single assignee (status/client modes)' },
                 ],
                 responses: {
-                    200: { description: 'Aggregated counts' },
-                    400: { description: 'Missing groupBy parameter' },
+                    200: {
+                        description: 'Aggregated counts',
+                        content: {
+                            'application/json': {
+                                schema: {
+                                    oneOf: [
+                                        {
+                                            type: 'array',
+                                            description: 'Returned for groupBy=status or groupBy=client',
+                                            items: {
+                                                type: 'object',
+                                                properties: {
+                                                    name:  { type: 'string' },
+                                                    count: { type: 'number' },
+                                                },
+                                            },
+                                        },
+                                        {
+                                            type: 'object',
+                                            description: 'Returned for groupBy=buckets',
+                                            properties: {
+                                                unassigned:      { type: 'number' },
+                                                wip:             { type: 'number' },
+                                                approvalPending: { type: 'number' },
+                                            },
+                                        },
+                                    ],
+                                },
+                            },
+                        },
+                    },
+                    400: { description: 'Missing or invalid groupBy parameter' },
                 },
             },
         },
@@ -1128,10 +1161,10 @@ const swaggerSpec = {
                                 type: 'object',
                                 description: 'Partial update of a Coral / CAD version. Only the keys you send are applied.',
                                 properties: {
-                                    IsApprovedVersion:  { type: 'boolean', description: 'Coral only — true to approve, false (with ReasonForRejection) to reject' },
-                                    IsFinalVersion:     { type: 'boolean', description: 'CAD only — true to mark as final, false (with ReasonForRejection) to reject' },
+                                    IsApprovedVersion:  { type: 'boolean', description: 'Coral only — true to approve (moves to Cad), false (with ReasonForRejection) to reject (SubStatus → Rejected - Redo)' },
+                                    IsFinalVersion:     { type: 'boolean', description: 'CAD only — true to mark as final (moves to Order Placement), false (with ReasonForRejection) to reject (SubStatus → Rejected - Redo)' },
                                     ReasonForRejection: { type: 'string' },
-                                    ShowToClient:       { type: 'boolean' },
+                                    SendForApproval:    { type: 'boolean', description: 'Set true (after the quotation is reviewed) to move the enquiry to "Design Approval Pending". Replaces the retired ShowToClient flag.' },
                                     CoralCode:          { type: 'string' },
                                     CadCode:            { type: 'string' },
                                     Cost:               { type: 'number', description: 'Update the fixed cost for this Coral / CAD version' },
