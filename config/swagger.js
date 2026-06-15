@@ -898,6 +898,7 @@ const swaggerSpec = {
                     { in: 'query', name: 'stoneType',         schema: { type: 'string' } },
                     { in: 'query', name: 'assignedTo',        schema: { type: 'string' }, description: 'User ID currently assigned (last StatusHistory entry)' },
                     { in: 'query', name: 'unassigned',        schema: { type: 'boolean' }, description: 'When true, returns only enquiries whose last StatusHistory entry has no AssignedTo (null / missing / empty). Overridden if assignedTo is also passed.' },
+                    { in: 'query', name: 'allClients',        schema: { type: 'boolean' }, description: 'Client Handlers only — when true, bypasses client-scoping and returns data across all clients (used when covering for an absent colleague). No effect for other roles.' },
                     { in: 'query', name: 'shippingDateFrom',  schema: { type: 'string', format: 'date-time' } },
                     { in: 'query', name: 'shippingDateTo',    schema: { type: 'string', format: 'date-time' } },
                     { in: 'query', name: 'assignedDateFrom',  schema: { type: 'string', format: 'date-time' } },
@@ -937,6 +938,7 @@ const swaggerSpec = {
                     { in: 'query', name: 'groupBy', required: true, schema: { type: 'string', enum: ['status', 'client', 'buckets'] }, example: 'buckets' },
                     { in: 'query', name: 'clientId', schema: { type: 'string' }, description: 'Optional — scopes all counts to a single client' },
                     { in: 'query', name: 'assignedTo', schema: { type: 'string' }, description: 'Optional — scopes counts to a single assignee (status/client modes)' },
+                    { in: 'query', name: 'allClients', schema: { type: 'boolean' }, description: 'Client Handlers only — when true, bypasses client-scoping and counts across all clients. No effect for other roles.' },
                 ],
                 responses: {
                     200: {
