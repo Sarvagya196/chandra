@@ -898,6 +898,7 @@ const swaggerSpec = {
                     { in: 'query', name: 'stoneType',         schema: { type: 'string' } },
                     { in: 'query', name: 'assignedTo',        schema: { type: 'string' }, description: 'User ID currently assigned (last StatusHistory entry)' },
                     { in: 'query', name: 'unassigned',        schema: { type: 'boolean' }, description: 'When true, returns only enquiries whose last StatusHistory entry has no AssignedTo (null / missing / empty). Overridden if assignedTo is also passed.' },
+                    { in: 'query', name: 'allClients',        schema: { type: 'boolean' }, description: 'Client Handlers only — when true, bypasses client-scoping and returns data across all clients (used when covering for an absent colleague). No effect for other roles.' },
                     { in: 'query', name: 'shippingDateFrom',  schema: { type: 'string', format: 'date-time' } },
                     { in: 'query', name: 'shippingDateTo',    schema: { type: 'string', format: 'date-time' } },
                     { in: 'query', name: 'assignedDateFrom',  schema: { type: 'string', format: 'date-time' } },
@@ -937,6 +938,7 @@ const swaggerSpec = {
                     { in: 'query', name: 'groupBy', required: true, schema: { type: 'string', enum: ['status', 'client', 'buckets'] }, example: 'buckets' },
                     { in: 'query', name: 'clientId', schema: { type: 'string' }, description: 'Optional — scopes all counts to a single client' },
                     { in: 'query', name: 'assignedTo', schema: { type: 'string' }, description: 'Optional — scopes counts to a single assignee (status/client modes)' },
+                    { in: 'query', name: 'allClients', schema: { type: 'boolean' }, description: 'Client Handlers only — when true, bypasses client-scoping and counts across all clients. No effect for other roles.' },
                 ],
                 responses: {
                     200: {
@@ -1380,6 +1382,86 @@ const swaggerSpec = {
                     },
                     400: { description: 'Missing image or clientId, or LLM extraction failed' },
                     500: { description: 'LLM call failed or pricing engine error' },
+                },
+            },
+        },
+
+        // ════════════════════════════════════════════════════════════════════
+        // Jewelry Estimator
+        // ════════════════════════════════════════════════════════════════════
+        '/api/jewelry-estimate': {
+            post: {
+                tags: ['Jewelry Estimator'],
+                summary: 'Estimate a ring BOM from images and return a price matrix',
+                description: 'Uploads ring images (top view required; side, 45-degree, and up to 5 additional optional) plus an optional description and ring size to a Vision LLM (Gemini 2.5 Pro), which estimates the bill of materials: stone shapes, carat weights, mm sizes, counts, and a single 10K-gold weight — estimation only (it never decides Natural vs Lab, quality, color, purity, price, or labour). The estimated BOM is then priced deterministically by the existing pricing engine against the given client\'s rate card, across a metal × stone-type matrix. Non-10K metal weights are derived from the 10K estimate by density ratio. Stateless — no image is stored. One LLM call (retried once on malformed output); no per-cell pricing-message LLM calls.',
+                requestBody: {
+                    required: true,
+                    content: {
+                        'multipart/form-data': {
+                            schema: {
+                                type: 'object',
+                                required: ['topView', 'clientId'],
+                                properties: {
+                                    topView:       { type: 'string', format: 'binary', description: 'Top view of the ring (required, max 10 MB)' },
+                                    sideView:      { type: 'string', format: 'binary', description: 'Side view (optional)' },
+                                    fortyFiveView: { type: 'string', format: 'binary', description: '45-degree view (optional)' },
+                                    additional:    { type: 'array', items: { type: 'string', format: 'binary' }, description: 'Up to 5 additional images (optional)' },
+                                    clientId:      { type: 'string', description: 'MongoDB ObjectId of the client whose rate card prices the matrix' },
+                                    description:   { type: 'string', description: 'Optional free-text description sent to the LLM. If a ring size is mentioned here it is used; otherwise size 7 is assumed.' },
+                                },
+                            },
+                        },
+                    },
+                },
+                responses: {
+                    200: {
+                        description: 'AI estimate plus a metal × stone-type price matrix',
+                        content: {
+                            'application/json': {
+                                schema: {
+                                    type: 'object',
+                                    properties: {
+                                        estimate: {
+                                            type: 'object',
+                                            description: 'Raw AI estimate (estimation only)',
+                                            properties: {
+                                                stones: {
+                                                    type: 'array',
+                                                    items: {
+                                                        type: 'object',
+                                                        properties: {
+                                                            shape:       { type: 'string', nullable: true },
+                                                            weightCarat: { type: 'number', nullable: true },
+                                                            sizeMM:      { type: 'number', nullable: true },
+                                                            count:       { type: 'integer' },
+                                                            confidence:  { type: 'number' },
+                                                        },
+                                                    },
+                                                },
+                                                estimated10KWeightGrams: { type: 'number' },
+                                                confidence:              { type: 'number' },
+                                            },
+                                        },
+                                        matrix: {
+                                            type: 'array',
+                                            description: 'One cell per metal × stone-type combination',
+                                            items: {
+                                                type: 'object',
+                                                properties: {
+                                                    metalQuality:     { type: 'string', example: '14K' },
+                                                    stoneType:        { type: 'string', example: 'NaturalRegular' },
+                                                    metalWeightGrams: { type: 'number', description: '10K weight converted to this metal by density ratio' },
+                                                    pricing:          { $ref: '#/components/schemas/PricingResult' },
+                                                },
+                                            },
+                                        },
+                                    },
+                                },
+                            },
+                        },
+                    },
+                    400: { description: 'Missing topView or clientId, or an image exceeds the inline limit' },
+                    500: { description: 'LLM call failed / returned invalid output, or pricing engine error' },
                 },
             },
         },

@@ -24,9 +24,20 @@ function deriveCostSubStatus(asset) {
 }
 
 async function scopeClientFilter(queryParams, userId) {
+    // Strip the control flag up front so it can never leak into DB filters.
+    const { allClients, ...params } = queryParams;
+    const override = allClients === true || allClients === 'true';
+
     const scope = await userScope.getEnquiryScope(userId);
-    const clientFilter = userScope.applyClientScope(queryParams.clientId, scope);
-    const finalParams = { ...queryParams, ...clientFilter };
+
+    // Client Handler explicitly overriding their scope (e.g. covering for an absent colleague):
+    // behave exactly like an unscoped user — honor a specific requested clientId, else no client filter.
+    if (scope && override) {
+        return params;
+    }
+
+    const clientFilter = userScope.applyClientScope(params.clientId, scope);
+    const finalParams = { ...params, ...clientFilter };
     if (clientFilter.clientIds !== undefined) delete finalParams.clientId;
     return finalParams;
 }
@@ -1286,7 +1297,6 @@ async function searchEnquiriesInternal(queryParams, options = {}) {
 
     // Call the repository with the clearly separated objects
     const result = await repo.search(searchTerm, filters, sort, pagination);
-    console.log(result);
 
     return {
         ...result,
