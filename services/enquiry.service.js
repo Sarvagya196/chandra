@@ -420,7 +420,7 @@ exports.updateEnquiry = async (id, data, userId) => {
     return { _id: enquiry._id };
 };
 
-exports.handleAssetUpload = async (id, type, files, version, code, userId, cost) => {
+exports.handleAssetUpload = async (id, type, files, version, code, userId, cost, isFinalVersion = false) => {
     const enquiry = await repo.getEnquiryById(id);
     if (!enquiry) throw new Error('Enquiry not found');
 
@@ -437,7 +437,7 @@ exports.handleAssetUpload = async (id, type, files, version, code, userId, cost)
             uploadResult = await handleCoralUpload(enquiry, files, version, code, userId, parsedCost);
             break;
         case 'cad':
-            uploadResult = await handleCadUpload(enquiry, files, version, code, userId, parsedCost);
+            uploadResult = await handleCadUpload(enquiry, files, version, code, userId, parsedCost, isFinalVersion);
             break;
         case 'reference':
             uploadResult = await handleReferenceImageUpload(enquiry, files, userId);
@@ -873,7 +873,7 @@ async function handleCoralUpload(enquiry, files, version, coralCode, userId, cos
     return { _id: enquiry._id };
 }
 
-async function handleCadUpload(enquiry, files, version, cadCode, userId, cost) {
+async function handleCadUpload(enquiry, files, version, cadCode, userId, cost, isFinalVersion = false) {
     const assetVersion = version || 'Version 1';
     let asset = enquiry.Cad.find(a => a.Version === assetVersion);
 
@@ -885,10 +885,11 @@ async function handleCadUpload(enquiry, files, version, cadCode, userId, cost) {
             Pricing: null,
             CadCode: cadCode || '',
             Cost: cost,
-            IsFinalVersion: false
+            IsFinalVersion: isFinalVersion
         };
-    } else if (cost !== undefined) {
-        asset.Cost = cost;
+    } else {
+        if (cost !== undefined) asset.Cost = cost;
+        if (isFinalVersion) asset.IsFinalVersion = true;
     }
 
     const newCadUploads = [];
