@@ -244,10 +244,19 @@ function calculatePricingEngine(context) {
     const dutiesAmount = Object.values(breakdown).reduce((a, b) => a + b, 0);
     console.log(`[pricing] dutiesAmount: ${dutiesAmount}`);
 
-    const totalPrice =
+    let totalPrice =
         (((metalPrice + diamondsPrice) * quantity) + dutiesAmount) *
         (1 + (charges.extraCharges / 100));
     console.log(`[pricing] totalPrice: ${totalPrice} (metalPrice: ${metalPrice}, diamondsPrice: ${diamondsPrice}, quantity: ${quantity}, dutiesAmount: ${dutiesAmount}, extraCharges: ${charges.extraCharges}%)`);
+
+    // Pricing is incomplete if any stone price is missing/0, or the metal rate/price is missing/0.
+    // An incomplete total is not trustworthy, so report it as 0. (No stones → only the metal check applies.)
+    const hasUnpricedStone = stones.some(stone => !(Number(stone.Price) > 0));
+    const metalUnpriced = !(metal.rate > 0) || !(metalPrice > 0);
+    if (hasUnpricedStone || metalUnpriced) {
+        console.log(`[pricing] totalPrice forced to 0 (hasUnpricedStone: ${hasUnpricedStone}, metalUnpriced: ${metalUnpriced})`);
+        totalPrice = 0;
+    }
 
     return {
         metalPrice,
