@@ -322,7 +322,7 @@ exports.updateEnquiry = async (id, data, userId) => {
         if (data.Status === 'Coral' || data.Status === 'Cad') {
             // Transitioning from Design Approval Pending → Cad means first CAD was accepted;
             // designer must now upload the Final CAD version.
-            const prevStatus = oldStatusHistory.Status;
+            const prevStatus = [...enquiry.StatusHistory].reverse().find(h => h.Status !== data.Status)?.Status;
             if (data.Status === 'Cad' && prevStatus === 'Design Approval Pending') {
                 subStatus = 'Final Cad Upload';
             } else {
