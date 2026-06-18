@@ -320,7 +320,14 @@ exports.updateEnquiry = async (id, data, userId) => {
         // SubStatus only applies while in the Coral/Cad phase.
         let subStatus = null;
         if (data.Status === 'Coral' || data.Status === 'Cad') {
-            subStatus = (data.AssignedTo && String(data.AssignedTo).trim()) ? 'Assigned' : 'Assign Pending';
+            // Transitioning from Design Approval Pending → Cad means first CAD was accepted;
+            // designer must now upload the Final CAD version.
+            const prevStatus = oldStatusHistory.Status;
+            if (data.Status === 'Cad' && prevStatus === 'Design Approval Pending') {
+                subStatus = 'Final Cad Upload';
+            } else {
+                subStatus = (data.AssignedTo && String(data.AssignedTo).trim()) ? 'Assigned' : 'Assign Pending';
+            }
         }
         const statusEntry = {
             Status: data.Status,
@@ -988,9 +995,9 @@ async function handleCadUpload(enquiry, files, version, cadCode, userId, cost, i
     // Add a status history entry for Cad upload
     const statusEntry = {
         Status: 'Cad',
-        SubStatus: deriveCostSubStatus(asset),
+        SubStatus: isFinalVersion ? 'Final Cad Upload' : deriveCostSubStatus(asset),
         Timestamp: new Date(),
-        AddedBy: userId, // User ID from JWT token
+        AddedBy: userId,
         Details: `CAD Version ${asset.Version} uploaded`
     };
 
