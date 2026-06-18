@@ -145,6 +145,7 @@ const enquirySchema = new mongoose.Schema({
             type: [PricingSchema]
         },
         IsFinalVersion: Boolean,
+        IsApprovedVersion: Boolean,
         ReasonForRejection: String,
         CreatedDate: { type: Date, default: Date.now }
     }]

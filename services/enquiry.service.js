@@ -616,20 +616,19 @@ exports.updateAssetData = async (enquiryId, type, version, data, userId) => {
             if (cadIndex !== -1) {
                 const updatedCad = enquiry.Cad[cadIndex];
 
-                if (data.IsFinalVersion !== undefined && data.IsFinalVersion !== null) {
-                    updatedCad.IsFinalVersion = data.IsFinalVersion;
-                    if (data.IsFinalVersion === true) {
-                        updatedCad.IsFinalVersion = data.IsFinalVersion;
+                // Step 1: Admin approves first CAD design → designer must upload Final CAD
+                if (data.IsApprovedVersion !== undefined && data.IsApprovedVersion !== null) {
+                    updatedCad.IsApprovedVersion = data.IsApprovedVersion;
+                    if (data.IsApprovedVersion === true) {
                         statusEntry = {
-                            Status: 'Order Placement',
-                            SubStatus: null,
+                            Status: 'Cad',
+                            SubStatus: 'Final Cad Upload',
                             Timestamp: new Date(),
-                            AssignedTo: null,
+                            AssignedTo: enquiry.StatusHistory?.at(-1)?.AssignedTo,
                             AddedBy: userId || 'System',
-                            Details: "Cad Approved"
+                            Details: "Cad Design Approved - Final CAD required"
                         };
-                    }
-                    else {
+                    } else {
                         updatedCad.ReasonForRejection = data.ReasonForRejection || "";
                         statusEntry = {
                             Status: 'Cad',
@@ -641,6 +640,22 @@ exports.updateAssetData = async (enquiryId, type, version, data, userId) => {
                         };
                     }
                     enquiry.StatusHistory.push(statusEntry);
+                }
+
+                // Step 2: Designer marks uploaded CAD as the final version → Order Placement
+                if (data.IsFinalVersion !== undefined && data.IsFinalVersion !== null) {
+                    updatedCad.IsFinalVersion = data.IsFinalVersion;
+                    if (data.IsFinalVersion === true) {
+                        statusEntry = {
+                            Status: 'Order Placement',
+                            SubStatus: null,
+                            Timestamp: new Date(),
+                            AssignedTo: null,
+                            AddedBy: userId || 'System',
+                            Details: "Final Cad Approved"
+                        };
+                        enquiry.StatusHistory.push(statusEntry);
+                    }
                 }
 
                 if (data.Pricing !== undefined && data.Pricing !== null) {
