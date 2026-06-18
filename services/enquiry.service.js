@@ -248,8 +248,8 @@ exports.updateEnquiry = async (id, data, userId) => {
         'Name', 'Quantity', 'StyleNumber', 'ClientId',
         'Priority', 'Metal', 'Category', 'StoneType',
         'MetalWeight', 'DiamondWeight', 'Stamping',
-        'Remarks', 'ShippingDate', 'Budget', 'SpecialRemarks', 
-        'ApprovedDate', 'GatiOrderNumber'
+        'Remarks', 'ShippingDate', 'Budget', 'SpecialRemarks',
+        'ApprovedDate', 'GatiOrderNumber', 'Checklist'
     ];
 
     const updatedFields = {};
@@ -320,7 +320,14 @@ exports.updateEnquiry = async (id, data, userId) => {
         // SubStatus only applies while in the Coral/Cad phase.
         let subStatus = null;
         if (data.Status === 'Coral' || data.Status === 'Cad') {
-            subStatus = (data.AssignedTo && String(data.AssignedTo).trim()) ? 'Assigned' : 'Assign Pending';
+            // Transitioning from Design Approval Pending → Cad means first CAD was accepted;
+            // designer must now upload the Final CAD version.
+            const prevStatus = [...enquiry.StatusHistory].reverse().find(h => h.Status !== data.Status)?.Status;
+            if (data.Status === 'Cad' && prevStatus === 'Design Approval Pending') {
+                subStatus = 'Final Cad Upload';
+            } else {
+                subStatus = (data.AssignedTo && String(data.AssignedTo).trim()) ? 'Assigned' : 'Assign Pending';
+            }
         }
         const statusEntry = {
             Status: data.Status,
@@ -420,7 +427,7 @@ exports.updateEnquiry = async (id, data, userId) => {
     return { _id: enquiry._id };
 };
 
-exports.handleAssetUpload = async (id, type, files, version, code, userId, cost) => {
+exports.handleAssetUpload = async (id, type, files, version, code, userId, cost, isFinalVersion = false) => {
     const enquiry = await repo.getEnquiryById(id);
     if (!enquiry) throw new Error('Enquiry not found');
 
@@ -437,7 +444,7 @@ exports.handleAssetUpload = async (id, type, files, version, code, userId, cost)
             uploadResult = await handleCoralUpload(enquiry, files, version, code, userId, parsedCost);
             break;
         case 'cad':
-            uploadResult = await handleCadUpload(enquiry, files, version, code, userId, parsedCost);
+            uploadResult = await handleCadUpload(enquiry, files, version, code, userId, parsedCost, isFinalVersion);
             break;
         case 'reference':
             uploadResult = await handleReferenceImageUpload(enquiry, files, userId);
@@ -609,20 +616,19 @@ exports.updateAssetData = async (enquiryId, type, version, data, userId) => {
             if (cadIndex !== -1) {
                 const updatedCad = enquiry.Cad[cadIndex];
 
-                if (data.IsFinalVersion !== undefined && data.IsFinalVersion !== null) {
-                    updatedCad.IsFinalVersion = data.IsFinalVersion;
-                    if (data.IsFinalVersion === true) {
-                        updatedCad.IsFinalVersion = data.IsFinalVersion;
+                // Step 1: Admin approves first CAD design → designer must upload Final CAD
+                if (data.IsApprovedVersion !== undefined && data.IsApprovedVersion !== null) {
+                    updatedCad.IsApprovedVersion = data.IsApprovedVersion;
+                    if (data.IsApprovedVersion === true) {
                         statusEntry = {
-                            Status: 'Order Placement',
-                            SubStatus: null,
+                            Status: 'Cad',
+                            SubStatus: 'Final Cad Upload',
                             Timestamp: new Date(),
-                            AssignedTo: null,
+                            AssignedTo: enquiry.StatusHistory?.at(-1)?.AssignedTo,
                             AddedBy: userId || 'System',
-                            Details: "Cad Approved"
+                            Details: "Cad Design Approved - Final CAD required"
                         };
-                    }
-                    else {
+                    } else {
                         updatedCad.ReasonForRejection = data.ReasonForRejection || "";
                         statusEntry = {
                             Status: 'Cad',
@@ -634,6 +640,22 @@ exports.updateAssetData = async (enquiryId, type, version, data, userId) => {
                         };
                     }
                     enquiry.StatusHistory.push(statusEntry);
+                }
+
+                // Step 2: Designer marks uploaded CAD as the final version → Order Placement
+                if (data.IsFinalVersion !== undefined && data.IsFinalVersion !== null) {
+                    updatedCad.IsFinalVersion = data.IsFinalVersion;
+                    if (data.IsFinalVersion === true) {
+                        statusEntry = {
+                            Status: 'Order Placement',
+                            SubStatus: null,
+                            Timestamp: new Date(),
+                            AssignedTo: null,
+                            AddedBy: userId || 'System',
+                            Details: "Final Cad Approved"
+                        };
+                        enquiry.StatusHistory.push(statusEntry);
+                    }
                 }
 
                 if (data.Pricing !== undefined && data.Pricing !== null) {
@@ -873,7 +895,7 @@ async function handleCoralUpload(enquiry, files, version, coralCode, userId, cos
     return { _id: enquiry._id };
 }
 
-async function handleCadUpload(enquiry, files, version, cadCode, userId, cost) {
+async function handleCadUpload(enquiry, files, version, cadCode, userId, cost, isFinalVersion = false) {
     const assetVersion = version || 'Version 1';
     let asset = enquiry.Cad.find(a => a.Version === assetVersion);
 
@@ -885,10 +907,11 @@ async function handleCadUpload(enquiry, files, version, cadCode, userId, cost) {
             Pricing: null,
             CadCode: cadCode || '',
             Cost: cost,
-            IsFinalVersion: false
+            IsFinalVersion: isFinalVersion
         };
-    } else if (cost !== undefined) {
-        asset.Cost = cost;
+    } else {
+        if (cost !== undefined) asset.Cost = cost;
+        if (isFinalVersion) asset.IsFinalVersion = true;
     }
 
     const newCadUploads = [];
@@ -987,9 +1010,9 @@ async function handleCadUpload(enquiry, files, version, cadCode, userId, cost) {
     // Add a status history entry for Cad upload
     const statusEntry = {
         Status: 'Cad',
-        SubStatus: deriveCostSubStatus(asset),
+        SubStatus: isFinalVersion ? 'Final Cad Upload' : deriveCostSubStatus(asset),
         Timestamp: new Date(),
-        AddedBy: userId, // User ID from JWT token
+        AddedBy: userId,
         Details: `CAD Version ${asset.Version} uploaded`
     };
 
