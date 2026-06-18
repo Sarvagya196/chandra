@@ -14,7 +14,7 @@ const REQUIRED_BY_STATUS = {
 
 // ─── Static option lists ─────────────────────────────────────────────────────
 const CATEGORY_OPTIONS = ['Ring', 'Bracelet', 'Necklace', 'Earrings', 'Pendant', 'Other'];
-const PRIORITY_OPTIONS  = ['Medium', 'High', 'Super High'];
+const PRIORITY_OPTIONS  = ['Normal', 'High', 'Super High'];
 const METAL_COLOR_OPTIONS   = ['Yellow Gold', 'White Gold', 'Rose Gold', 'Two Tone Rose White Gold', 'Two Tone Yellow White Gold'];
 const METAL_QUALITY_OPTIONS = ['10K', '14K', '18K', '22K', '24K', 'Silver 925', 'Platinum'];
 
@@ -29,6 +29,21 @@ const FIELD_LABELS = {
     'StoneType':    'Stone Type',
     'Remarks':      'Remarks',
 };
+
+// ─── Priority helpers ────────────────────────────────────────────────────────
+const RANK = { 'Normal': 0, 'High': 1, 'Super High': 2 };
+const byRank = (n) => ['Normal', 'High', 'Super High'][Math.max(0, Math.min(2, n))];
+const highest = (...ps) => byRank(Math.max(...ps.map(p => RANK[p] ?? 0)));
+const CLIENT_HIGH_MAX = Number(process.env.CLIENT_PRIORITY_HIGH_MAX) || 2;
+
+// Deterministic client-tier baseline (lower PriorityOrder = more important client).
+function clientTierPriority(client) {
+    const po = client?.PriorityOrder;
+    if (po == null) return 'Normal';
+    if (po === 1) return 'Super High';
+    if (po <= CLIENT_HIGH_MAX) return 'High';
+    return 'Normal';
+}
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 function getNestedValue(obj, dotPath) {
@@ -71,7 +86,7 @@ function buildSystemPrompt(clientList, stoneTypeList) {
     return `You are an expert jewellery order assistant. Extract structured enquiry details from the user's message.
 
 Available clients (match by name from the message, return the "id" value as ClientId).
-Each client has a priority_order (lower number = higher priority client). Use this as the baseline for the Priority field — a lower priority_order client should default to a higher priority unless the message says otherwise:
+Each client has a priority_order (lower number = more important client), used as the Priority baseline (see the Priority rule below):
 ${clientJson}
 
 Available stone types (match by name from the message, return the "name" value as StoneType):
@@ -84,7 +99,10 @@ Return ONLY a valid JSON object with these keys (use null for anything not menti
   "StyleNumber": "<style or design number if mentioned it would be 5 or 6 digits like R45252, E63464, etc. or null>",
   "Quantity": <number or null>,
   "Category": "<Ring|Bracelet|Necklace|Earrings|Pendant|Bangle|Other or null>",
-  "Priority": "<Normal|High|Super High — infer from urgency keywords like 'urgent', 'asap', 'fast', 'ship soon' or null>",
+  "Priority": "<Normal|High|Super High — set by taking the HIGHER of two signals, never below the client-tier baseline:
+      (1) Client tier from the matched client's priority_order: 1 -> 'Super High', 2 -> 'High', 3+ or unknown -> 'Normal'.
+      (2) Message urgency by wording (not just keywords): clear rush / hard deadline ('urgent','asap','rush','need immediately','by tomorrow') -> 'Super High'; mild time pressure ('soon','this week','priority') -> 'High'; none -> 'Normal'.
+      Final Priority = the higher of the two>",
   "Budget": "<string or null>",
   "Metal": {
     "Color": "<Yellow Gold|White Gold|Rose Gold|Two Tone Rose White Gold|Two Tone Yellow White Gold| or null>",
@@ -146,6 +164,12 @@ exports.parseEnquiryMessage = async ({ message, mediaType }) => {
     // Remarks always defaults to the original message
     if (isMissing(parsed.Remarks)) {
         parsed.Remarks = message;
+    }
+
+    // Enforce the client-tier priority floor deterministically (only ever escalates).
+    const matchedClient = clients.find(c => String(c._id) === String(parsed.ClientId));
+    if (matchedClient) {
+        parsed.Priority = highest(parsed.Priority || 'Normal', clientTierPriority(matchedClient));
     }
 
     // Attach Status for downstream createEnquiry
