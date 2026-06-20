@@ -1,10 +1,9 @@
 const metalPricesService = require('./metalPrices.service');
 const clientService = require('./client.service');
+const { normalizeShape, isRoundShape } = require('../utils/shapes');
 const OpenAI = require('openai');
 
 const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
-
-const roundIdentifier = "RD";
 
 function normalizeNumber(num) {
     const n = parseFloat(num);
@@ -105,7 +104,8 @@ async function resolvePricingContext(pricingDetails, clientId, isRecalculate = f
 function findStoneMatch(stone, pricingDiamonds) {
     const nonRoundType = "Natural";
     const isNaturalVariant = stone.Type === "NaturalRegular" || stone.Type === "NaturalLower" || stone.Type === "TYPE 1" || stone.Type === "TYPE 2" || stone.Type === "TYPE 3";
-    const isNonRound = stone.Shape !== roundIdentifier;
+    const stoneShape = normalizeShape(stone.Shape);
+    const isNonRound = !isRoundShape(stone.Shape);
 
     // Helper to parse normalized size to number for comparison
     const parseSizeValue = (size) => {
@@ -118,11 +118,11 @@ function findStoneMatch(stone, pricingDiamonds) {
 
     // Build filter based on type rules
     const baseFilter = (d) => {
-        const typeMatch = isNaturalVariant && isNonRound 
-            ? d.Type === nonRoundType 
+        const typeMatch = isNaturalVariant && isNonRound
+            ? d.Type === nonRoundType
             : d.Type === stone.Type;
-        
-        return typeMatch && d.Shape === stone.Shape;
+
+        return typeMatch && normalizeShape(d.Shape) === stoneShape;
     };
 
     // First try: Find all matching candidates by mm size >= stone's mm size
@@ -267,7 +267,6 @@ function calculatePricingEngine(context) {
         totalPrice,
         totalPieces,
 
-        // 🔥 THIS IS THE KEY FIX
         bases: {
             natural: naturalBase,
             labGold: labGoldBase,

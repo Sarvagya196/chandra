@@ -4,6 +4,7 @@ const {
     calculatePricingEngine,
     formatPricingResponse,
 } = require('./pricing.service');
+const { normalizeShape } = require('../utils/shapes');
 
 const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
 
@@ -20,14 +21,6 @@ const DENSITY = {
     'Silver 925': 10.36, 'Platinum': 21.45,
 };
 const BASE_DENSITY = DENSITY['10K'];
-
-// AI shape words → engine shape codes. Must align with the client's
-// Pricing.Diamonds shape codes; unknown shapes pass through (→ Price 0, surfaced not fatal).
-const SHAPE_CODE_MAP = {
-    round: 'RD', oval: 'OV', pear: 'PS', emerald: 'EM', princess: 'PR',
-    cushion: 'CU', marquise: 'MQ', radiant: 'RA', asscher: 'AS',
-    heart: 'HT', baguette: 'BG',
-};
 
 // Round-brilliant approximation: a 6.5 mm round ≈ 1.00 ct.
 const MM_PER_CARAT = 6.5;
@@ -156,19 +149,13 @@ async function callLLM(userParts) {
     return JSON.parse(response.response.text());
 }
 
-function shapeToCode(shape) {
-    if (!shape) return '';
-    const key = String(shape).trim().toLowerCase();
-    return SHAPE_CODE_MAP[key] || String(shape).trim();
-}
-
 const round2 = (n) => Math.round(n * 100) / 100;
 
 // Turn one AI stone into the engine's stone shape, deriving CtWeight + an mm size
 // usable by findStoneMatch (which matches on Type+Shape+MmSize, falling back to weight).
 function toPricingStone(aiStone, type) {
     const count = Number(aiStone.count) || 0;
-    const code = shapeToCode(aiStone.shape);
+    const code = normalizeShape(aiStone.shape);
 
     let perStoneCarat;
     let mm;

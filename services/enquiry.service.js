@@ -12,6 +12,7 @@ const reportsService = require('../services/reports.service');
 const userScope = require('./userScope.service');
 const { calculatePricing: pricingCalculate } = require('./pricing.service');
 const { extractPricingDataFromImage } = require('./imagePricing.service');
+const { normalizeShape } = require('../utils/shapes');
 
 // 'Quotation Review' only when pricing is complete; else 'Cost Missing'.
 function deriveCostSubStatus(asset) {
@@ -1090,7 +1091,7 @@ async function handleExcelDataForCoral(file) {
 
     for (const row of jsonData) {
         const Color = row['DIA/COL']?.toString()?.trim();
-        const Shape = row['ST SHAPE']?.toString()?.trim();
+        const Shape = normalizeShape(row['ST SHAPE']?.toString()?.trim());
         const MmSize = row['MM SIZE']?.toString()?.trim();
         const SieveSize = row['SIEVE SIZE']?.toString()?.trim();
         const Weight = parseFloat(row['AVRG WT']) || 0;
@@ -1151,7 +1152,7 @@ async function handleExcelDataForCad(file) {
 
     for (const row of jsonData) {
         const Color = row['DIA/COL']?.toString()?.trim();
-        const Shape = row['ST SHAPE']?.toString()?.trim() || '';
+        const Shape = normalizeShape(row['ST SHAPE']?.toString()?.trim() || '');
         const MmSize = row['MM SIZE']?.toString()?.trim();
         const SieveSize = row['SIEVE SIZE']?.toString()?.trim().match(/[\d.]+(?:-[\d.]+)?/)?.[0] || '';
         const Weight = parseFloat(row['AVRG WT']) || 0;
