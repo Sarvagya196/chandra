@@ -79,6 +79,11 @@ const swaggerSpec = {
                         type: 'string',
                         description: 'Template string used to format the client-facing pricing message.',
                     },
+                    ApplicableStoneTypes: {
+                        type: 'array',
+                        items: { type: 'string' },
+                        description: 'Stone types this client supports (from the StoneTypes codelist). Case-insensitive on input and canonicalized on store; unknown values are kept as sent. Limits the jewelry-estimator price matrix to these types.',
+                    },
                 },
             },
 

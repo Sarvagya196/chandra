@@ -5,6 +5,8 @@ const {
     formatPricingResponse,
 } = require('./pricing.service');
 const { normalizeShape } = require('../utils/shapes');
+const clientService = require('./client.service');
+const codelistsService = require('./codelists.service');
 
 const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
 
@@ -226,9 +228,15 @@ exports.estimateAndPrice = async ({ files, clientId, description }) => {
         estimate = validateEstimate(await callLLM(userParts));
     }
 
+    // Limit the stone-type axis to the client's applicable types (canonical-cased so the
+    // pricing engine matches Type exactly); fall back to the default set when none are configured.
+    const client = await clientService.getClient(clientId).catch(() => null);
+    const applicable = await codelistsService.canonicalizeStoneTypes(client?.ApplicableStoneTypes || []);
+    const stoneTypes = applicable.length ? applicable : STONE_TYPES;
+
     const matrix = [];
     for (const metalQuality of METALS) {
-        for (const stoneType of STONE_TYPES) {
+        for (const stoneType of stoneTypes) {
             matrix.push(await priceCell({ estimate, clientId, metalQuality, stoneType }));
         }
     }
