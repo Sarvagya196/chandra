@@ -1,5 +1,6 @@
 const Enquiry = require('../models/enquiry.model');
 const lodash = require('lodash');
+const { deriveSubStatus } = require('../utils/enquiryStatus');
 
 const MAX_SEARCH_LEN = 100;
 function escapeRegex(s) {
@@ -506,6 +507,7 @@ exports.bulkAppendStatus = async (ids, { Status, AddedBy }) => {
                     $push: {
                         StatusHistory: {
                             Status,
+                            SubStatus: deriveSubStatus(Status, { assignedTo }),
                             AssignedTo: assignedTo,
                             AddedBy,
                             Timestamp: new Date(),

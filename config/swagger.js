@@ -1106,7 +1106,7 @@ const swaggerSpec = {
             put: {
                 tags: ['Enquiries'],
                 summary: 'Update enquiry by ID',
-                description: 'Updates the enquiry and, on every update, fires two independent async Gemini hooks: one regenerates the `Checklist` from the (possibly updated) `Remarks` / `SpecialRemarks`, the other regenerates the designer-facing Markdown `Summary` from the full enquiry. The HTTP response returns immediately; refetch the enquiry to see the new checklist and summary.',
+                description: 'Updates the enquiry. STATUS/SUB-STATUS RULES: the current state is the last StatusHistory entry; the backend owns sub-status logic. Normal edits should send only changed data fields + `AssignedTo` — never `SubStatus`. On reassignment the backend derives `Assigned`/`Assign Pending`. Sending a `Status` different from the current one is treated as an ADMIN OVERRIDE: if `SubStatus` is provided it must be a valid pair for that Status (else 400); if omitted, the backend derives the assignment-based sub-status from the effective assignee (carried forward when `AssignedTo` isn\'t sent). Allowed pairs — Coral/Cad: Assign Pending, Assigned, Rejected - Redo, Cost Missing, Quotation Review (+ Final Cad Upload for Cad); Enquiry Created / Design Approval Pending / Order Placement: none. Everyday workflow transitions should flow through the asset-upload/approve actions, not this endpoint. Also fires two async Gemini hooks (Checklist + Summary regeneration); the response returns immediately.',
                 parameters: [{ in: 'path', name: 'id', required: true, schema: { type: 'string' } }],
                 requestBody: {
                     required: true,
