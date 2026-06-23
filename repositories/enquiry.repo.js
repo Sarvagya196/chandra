@@ -244,6 +244,7 @@ exports.search = async (searchTerm, filters, sort, pagination) => {
                 firstStatus: { $arrayElemAt: ["$StatusHistory", 0] },
                 lastStatus: { $arrayElemAt: ["$StatusHistory", -1] },
                 finalCad: { $arrayElemAt: [{ $filter: { input: "$Cad", as: "c", cond: { $eq: ["$$c.IsFinalVersion", true] } } }, 0] },
+                approvedCad: { $arrayElemAt: [{ $filter: { input: "$Cad", as: "c", cond: { $eq: ["$$c.IsApprovedVersion", true] } } }, 0] },
                 lastCad: { $arrayElemAt: ["$Cad", -1] },
                 approvedCoral: { $arrayElemAt: [{ $filter: { input: "$Coral", as: "co", cond: { $eq: ["$$co.IsApprovedVersion", true] } } }, 0] },
                 lastCoral: { $arrayElemAt: ["$Coral", -1] }
@@ -348,7 +349,13 @@ exports.search = async (searchTerm, filters, sort, pagination) => {
                             SpecialRemarks: 1,
                             Checklist: 1,
                             Summary: 1,
-                            LatestQuotation: 1
+                            LatestQuotation: 1,
+                            // High-level version markers (Version only) so the UI can read workflow progress
+                            "lastCoral.Version": 1,
+                            "approvedCoral.Version": 1,
+                            "lastCad.Version": 1,
+                            "approvedCad.Version": 1,
+                            "finalCad.Version": 1
                             // Note: _id is included by default
                         }
                     }
