@@ -241,9 +241,10 @@ const swaggerSpec = {
             VersionMarker: {
                 type: 'object',
                 nullable: true,
-                description: 'High-level marker for a Coral/CAD version — only its Version label is returned in search. Absent when that version does not exist.',
+                description: 'High-level marker for a Coral/CAD version returned in search — the Version label plus its rejection reason (if any). Absent when that version does not exist.',
                 properties: {
-                    Version: { type: 'string', example: 'Version 2' },
+                    Version:            { type: 'string', example: 'Version 2' },
+                    ReasonForRejection: { type: 'string', nullable: true, description: 'Set when this version was rejected; empty/absent otherwise.' },
                 },
             },
             EnquirySearchItem: {

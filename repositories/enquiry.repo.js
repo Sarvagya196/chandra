@@ -350,12 +350,17 @@ exports.search = async (searchTerm, filters, sort, pagination) => {
                             Checklist: 1,
                             Summary: 1,
                             LatestQuotation: 1,
-                            // High-level version markers (Version only) so the UI can read workflow progress
+                            // High-level version markers (Version + reject reason) so the UI can read workflow progress
                             "lastCoral.Version": 1,
+                            "lastCoral.ReasonForRejection": 1,
                             "approvedCoral.Version": 1,
+                            "approvedCoral.ReasonForRejection": 1,
                             "lastCad.Version": 1,
+                            "lastCad.ReasonForRejection": 1,
                             "approvedCad.Version": 1,
-                            "finalCad.Version": 1
+                            "approvedCad.ReasonForRejection": 1,
+                            "finalCad.Version": 1,
+                            "finalCad.ReasonForRejection": 1
                             // Note: _id is included by default
                         }
                     }
