@@ -1348,6 +1348,38 @@ const swaggerSpec = {
                 },
             },
         },
+        '/api/notifications/escalations': {
+            get: {
+                tags: ['Notifications'],
+                summary: 'Get the authenticated user\'s escalation alerts (escalation dashboard)',
+                description: 'Returns the current user\'s notifications of Type "escalation" (newest first) — the SLA-delay alerts raised by the daily escalation job for stuck Coral/Cad enquiries. Same rows also appear in GET /api/notifications.',
+                parameters: [{ in: 'query', name: 'limit', schema: { type: 'integer', default: 50, maximum: 100 } }],
+                responses: {
+                    200: {
+                        content: {
+                            'application/json': {
+                                schema: { type: 'array', items: { $ref: '#/components/schemas/Notification' } },
+                            },
+                        },
+                    },
+                },
+            },
+        },
+        '/api/notifications/escalations/unread-count': {
+            get: {
+                tags: ['Notifications'],
+                summary: 'Get the unread escalation-alert count (badge)',
+                responses: {
+                    200: {
+                        content: {
+                            'application/json': {
+                                schema: { type: 'object', properties: { count: { type: 'number' } } },
+                            },
+                        },
+                    },
+                },
+            },
+        },
         '/api/notifications/mark-all-read': {
             post: {
                 tags: ['Notifications'],

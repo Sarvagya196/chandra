@@ -92,6 +92,16 @@ const enquirySchema = new mongoose.Schema({
     SpecialRemarks: String,
     Checklist: { type: ChecklistSchema, default: null },
     Summary: { type: String, default: null },
+    // Internal bookkeeping for the SLA escalation job (not surfaced in search).
+    Escalation: {
+        type: new mongoose.Schema({
+            StatusAnchor: Date,                       // lastStatus.Timestamp this window is tracking
+            Bumps: { type: Number, default: 0 },      // auto priority bumps applied this window
+            LastHandlerAlertOn: String,               // YYYY-MM-DD of last handler escalation
+            LastAdminAlertOn: String,                 // YYYY-MM-DD of last admin escalation
+        }, { _id: false }),
+        default: null,
+    },
     Budget: String,
     ShippingDate: Date,
     ApprovedDate: Date,

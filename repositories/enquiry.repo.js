@@ -88,6 +88,42 @@ exports.updateSummary = async (id, summary) => {
   );
 };
 
+exports.updatePriority = async (id, priority) => {
+  return await Enquiry.findByIdAndUpdate(
+    id,
+    { $set: { Priority: priority } },
+    { new: true }
+  );
+};
+
+exports.updateEscalation = async (id, escalation) => {
+  return await Enquiry.findByIdAndUpdate(
+    id,
+    { $set: { Escalation: escalation } },
+    { new: true }
+  );
+};
+
+// Enquiries whose CURRENT status is Coral/Cad and which entered that status on/before `cutoff`.
+// Returns lean rows with the fields the escalation job needs.
+exports.findStuckInDesignStatuses = async (cutoff) => {
+  return Enquiry.aggregate([
+    { $addFields: { lastStatus: { $arrayElemAt: ['$StatusHistory', -1] } } },
+    { $match: {
+        'lastStatus.Status': { $in: ['Coral', 'Cad'] },
+        'lastStatus.Timestamp': { $lte: cutoff },
+    } },
+    { $project: {
+        Name: 1,
+        Priority: 1,
+        ClientId: 1,
+        Escalation: 1,
+        CurrentStatus: '$lastStatus.Status',
+        StatusAt: '$lastStatus.Timestamp',
+    } },
+  ]);
+};
+
 exports.updateEnquiry = async (id, updatedEnquiry) => {
   // 1️⃣ Fetch existing document
   const existing = await Enquiry.findById(id).lean();

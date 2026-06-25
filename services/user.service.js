@@ -39,6 +39,10 @@ exports.getUsersByClient = async (clientId) => {
     return await repo.getUsersByClient(clientId);
 }
 
+exports.getClientHandlersForClient = async (clientId) => {
+    return await repo.getClientHandlersForClient(clientId);
+}
+
 exports.savePushToken = async (userId, token) => {
   return await repo.savePushToken(userId, token);
 };
