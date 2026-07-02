@@ -3,23 +3,64 @@ const userService = require("../services/user.service");
 const clientService = require("../services/client.service");
 const metalPricesService = require("../services/metalPrices.service");
 const chatService = require('./chat.service');
-const { uploadToS3, generatePresignedUrl } = require('../utils/s3');
+const { uploadToS3, generatePresignedUrl, downloadFromS3 } = require('../utils/s3');
 const { v4: uuidv4 } = require('uuid');
 const xlsx = require('xlsx');
 const codelistsService = require('../services/codelists.service');
 const notificationService = require('../services/notifications.service');
 const reportsService = require('../services/reports.service');
 const { calculatePricing: pricingCalculate } = require('./pricing.service');
+const { extractPricingDataFromImage } = require('./imagePricing.service');
+const { normalizeShape } = require('../utils/shapes');
+const { deriveSubStatus, isValidPair, appendStatusEntry } = require('../utils/enquiryStatus');
+const {InsertDesign} = require('./designs.service');
+
+// 'Quotation Review' only when pricing is complete; else 'Cost Missing'.
+function deriveCostSubStatus(asset) {
+    const p = Array.isArray(asset?.Pricing) ? asset.Pricing[0] : null;
+    if (!p) return 'Cost Missing';
+    const stones = p.Stones || [];
+    const stonesPriced = stones.length > 0 && stones.every(s => Number(s.Price) > 0);
+    const metalRate = Number(p.Metal?.Rate) > 0;
+    return (stonesPriced && metalRate) ? 'Quotation Review' : 'Cost Missing';
+}
+
+async function scopeClientFilter(queryParams, userId) {
+    const { allClients, ...params } = queryParams;
+    const override = allClients === true || allClients === 'true';
+
+    const scope = await userScope.getEnquiryScope(userId);
+
+    if (scope && override) {
+        return params;
+    }
+
+    const clientFilter = userScope.applyClientScope(params.clientId, scope);
+    const finalParams = { ...params, ...clientFilter };
+    if (clientFilter.clientIds !== undefined) delete finalParams.clientId;
+    return finalParams;
+}
 
 // Best-effort: describe + embed each newly-uploaded image and store in DesignEmbedding.
 // Failures are logged and swallowed — never break the upload path.
 async function indexUploadedAssets({ enquiryId, type, version, uploads }) {
     const { describeAndEmbedImage } = require('./imageDescribe.service');
     const { indexDesign } = require('./designSimilarity.service');
+    const Design = require('../models/designs.model');
+
+    const designType = type === 'cad' ? 'Cad' : type;
+
     for (const u of uploads) {
         try {
-            const result = await describeAndEmbedImage({ s3Key: u.key, mimetype: u.mimetype });
+            const [imageBuffer, result] = await Promise.all([
+                downloadFromS3(u.key),
+                describeAndEmbedImage({ s3Key: u.key, mimetype: u.mimetype }),
+            ]);
             if (!result) continue;
+
+            const pricingData = await extractPricingDataFromImage(imageBuffer, u.mimetype);
+            if (!pricingData) continue;
+
             await indexDesign({
                 enquiryId,
                 type,
@@ -28,6 +69,16 @@ async function indexUploadedAssets({ enquiryId, type, version, uploads }) {
                 description: result.description,
                 tags: result.tags,
                 embedding: result.embedding,
+            });
+
+            await InsertDesign({
+                designType,
+                enquiryId,
+                s3Key: u.key,
+                mimeType: u.mimetype,
+                stones: pricingData.Stones,
+                metal: pricingData.Metal,
+                indexEmbedding: false,
             });
         } catch (err) {
             console.error(`[indexUploadedAssets] failed for ${type} key ${u.key}:`, err);
@@ -142,12 +193,12 @@ exports.createEnquiry = async (data, files = [], userId) => {
 
     // Fire-and-forget: image embedding, auto-assign designer, similar-design search.
     // Best-effort — failures are logged inside the hook and never block the response.
-    // queueMicrotask(() => {
-    //     const { postEnquiryCreateHook } = require('./enquiryAssignment.service');
-    //     postEnquiryCreateHook(enquiry).catch(err =>
-    //         console.error('postEnquiryCreateHook failed:', err)
-    //     );
-    // });
+    queueMicrotask(() => {
+        const { postEnquiryCreateHook } = require('./enquiryAssignment.service');
+        postEnquiryCreateHook(enquiry).catch(err =>
+            console.error('postEnquiryCreateHook failed:', err)
+        );
+    });
 
     return enquiry._id;
 };
