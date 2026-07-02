@@ -5,6 +5,7 @@ const designEmbeddingSchema = new mongoose.Schema({
     Type:        { type: String, enum: ['reference', 'coral', 'cad'], required: true },
     Version:     { type: String },
     Key:         { type: String, required: true },
+    Category:    { type: String },
     Description: { type: String },
     Tags:        [{ type: String }],
     Embedding:   { type: [Number], required: true },

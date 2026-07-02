@@ -3,7 +3,7 @@ const userService = require("../services/user.service");
 const clientService = require("../services/client.service");
 const metalPricesService = require("../services/metalPrices.service");
 const chatService = require('./chat.service');
-const { uploadToS3, generatePresignedUrl } = require('../utils/s3');
+const { uploadToS3, generatePresignedUrl, downloadFromS3 } = require('../utils/s3');
 const { v4: uuidv4 } = require('uuid');
 const xlsx = require('xlsx');
 const codelistsService = require('../services/codelists.service');
@@ -12,6 +12,9 @@ const reportsService = require('../services/reports.service');
 const userScope = require('./userScope.service');
 const { calculatePricing: pricingCalculate } = require('./pricing.service');
 const { extractPricingDataFromImage } = require('./imagePricing.service');
+const { normalizeShape } = require('../utils/shapes');
+const { deriveSubStatus, isValidPair, appendStatusEntry } = require('../utils/enquiryStatus');
+const {InsertDesign} = require('./designs.service');
 
 // 'Quotation Review' only when pricing is complete; else 'Cost Missing'.
 function deriveCostSubStatus(asset) {
@@ -47,10 +50,21 @@ async function scopeClientFilter(queryParams, userId) {
 async function indexUploadedAssets({ enquiryId, type, version, uploads }) {
     const { describeAndEmbedImage } = require('./imageDescribe.service');
     const { indexDesign } = require('./designSimilarity.service');
+    const Design = require('../models/designs.model');
+
+    const designType = type === 'cad' ? 'Cad' : type;
+
     for (const u of uploads) {
         try {
-            const result = await describeAndEmbedImage({ s3Key: u.key, mimetype: u.mimetype });
+            const [imageBuffer, result] = await Promise.all([
+                downloadFromS3(u.key),
+                describeAndEmbedImage({ s3Key: u.key, mimetype: u.mimetype }),
+            ]);
             if (!result) continue;
+
+            const pricingData = await extractPricingDataFromImage(imageBuffer, u.mimetype);
+            if (!pricingData) continue;
+
             await indexDesign({
                 enquiryId,
                 type,
@@ -59,6 +73,16 @@ async function indexUploadedAssets({ enquiryId, type, version, uploads }) {
                 description: result.description,
                 tags: result.tags,
                 embedding: result.embedding,
+            });
+
+            await InsertDesign({
+                designType,
+                enquiryId,
+                s3Key: u.key,
+                mimeType: u.mimetype,
+                stones: pricingData.Stones,
+                metal: pricingData.Metal,
+                indexEmbedding: false,
             });
         } catch (err) {
             console.error(`[indexUploadedAssets] failed for ${type} key ${u.key}:`, err);
@@ -206,12 +230,12 @@ exports.createEnquiry = async (data, files = [], userId) => {
 
     // Fire-and-forget: image embedding, auto-assign designer, similar-design search.
     // Best-effort — failures are logged inside the hook and never block the response.
-    // queueMicrotask(() => {
-    //     const { postEnquiryCreateHook } = require('./enquiryAssignment.service');
-    //     postEnquiryCreateHook(enquiry).catch(err =>
-    //         console.error('postEnquiryCreateHook failed:', err)
-    //     );
-    // });
+    queueMicrotask(() => {
+        const { postEnquiryCreateHook } = require('./enquiryAssignment.service');
+        postEnquiryCreateHook(enquiry).catch(err =>
+            console.error('postEnquiryCreateHook failed:', err)
+        );
+    });
 
     queueMicrotask(() => regenerateChecklist(enquiry._id));
     queueMicrotask(() => regenerateSummary(enquiry._id));
