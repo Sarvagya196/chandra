@@ -20,6 +20,19 @@ const mongoose = require('mongoose');
     Rate: Number
   }, { _id: false });
 
+  const ChecklistSchema = new mongoose.Schema({
+    Engraving: { type: String, default: 'NA' },
+    SizeLength: { type: String, default: 'NA' },
+    SizeRingSize: { type: String, default: 'NA' },
+    DimensionsThickness: { type: String, default: 'NA' },
+    DeliveryDate: { type: String, default: 'NA' },
+    EnamelPaintwork: { type: String, default: 'NA' },
+    RhodiumInstructions: { type: String, default: 'NA' },
+    Components: { type: String, default: 'NA' },
+    Findings: { type: String, default: 'NA' },
+    GeneratedAt: Date,
+  }, { _id: false });
+
   const PricingSchema = new mongoose.Schema({
     MetalPrice: { type: Number, default: 0 },
     DiamondsPrice: { type: Number, default: 0 },
@@ -51,6 +64,7 @@ const enquirySchema = new mongoose.Schema({
     ClientId: { type: String, ref: 'Client' },
     StatusHistory: [{
         Status: String,
+        SubStatus: { type: String, default: null },
         Timestamp: Date,
         AssignedTo: String,
         Details: String,
@@ -76,6 +90,8 @@ const enquirySchema = new mongoose.Schema({
     Stamping: String,
     Remarks: String,
     SpecialRemarks: String,
+    Checklist: { type: ChecklistSchema, default: null },
+    Summary: { type: String, default: null },
     Budget: String,
     ShippingDate: Date,
     ApprovedDate: Date,
@@ -93,27 +109,7 @@ const enquirySchema = new mongoose.Schema({
     Coral: [{
         Version: String,
         CoralCode: String,
-        Images: [{
-            Id: String,
-            Key: String,
-            Description: String
-        }], 
-        Excel: {
-            Id: String,
-            Key: String,
-            Description: String
-        },
-        Pricing: {
-            type: [PricingSchema]
-        },
-        ShowToClient: Boolean,
-        IsApprovedVersion: Boolean,
-        ReasonForRejection: String,
-        CreatedDate: { type: Date, default: Date.now }
-    }],
-    Cad: [{
-        Version: String,
-        CadCode: String,
+        Cost: Number,
         Images: [{
             Id: String,
             Key: String,
@@ -127,8 +123,29 @@ const enquirySchema = new mongoose.Schema({
         Pricing: {
             type: [PricingSchema]
         },
-        ShowToClient: Boolean,
+        IsApprovedVersion: Boolean,
+        ReasonForRejection: String,
+        CreatedDate: { type: Date, default: Date.now }
+    }],
+    Cad: [{
+        Version: String,
+        CadCode: String,
+        Cost: Number,
+        Images: [{
+            Id: String,
+            Key: String,
+            Description: String
+        }],
+        Excel: {
+            Id: String,
+            Key: String,
+            Description: String
+        },
+        Pricing: {
+            type: [PricingSchema]
+        },
         IsFinalVersion: Boolean,
+        IsApprovedVersion: Boolean,
         ReasonForRejection: String,
         CreatedDate: { type: Date, default: Date.now }
     }]

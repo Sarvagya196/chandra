@@ -1,10 +1,9 @@
 const metalPricesService = require('./metalPrices.service');
 const clientService = require('./client.service');
+const { normalizeShape, isRoundShape } = require('../utils/shapes');
 const OpenAI = require('openai');
 
 const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
-
-const roundIdentifier = "RD";
 
 function normalizeNumber(num) {
     const n = parseFloat(num);
@@ -22,7 +21,7 @@ function normalizeMmSize(value) {
     return normalizeNumber(value);
 }
 
-async function resolvePricingContext(pricingDetails, clientId) {
+async function resolvePricingContext(pricingDetails, clientId, isRecalculate = false) {
     const todaysMetalRates = await metalPricesService.getLatest();
 
     const metalWeight = parseFloat(pricingDetails.Metal.Weight);
@@ -49,26 +48,37 @@ async function resolvePricingContext(pricingDetails, clientId) {
         console.log(`[pricing] gold rate: ${goldRate}, karat: ${match[1]}, metalRate: ${metalRate}`);
     }
 
-    let client = clientId ? await clientService.getClient(clientId) : null;
+    const client = await clientService.getClient(clientId);
 
-    const duties = {
-        natural: pricingDetails?.NaturalDuties ?? client?.Pricing?.NaturalDuties ?? 0,
-        lab: pricingDetails?.LabDuties ?? client?.Pricing?.LabDuties ?? 0,
-        gold: pricingDetails?.GoldDuties ?? client?.Pricing?.GoldDuties ?? 0,
-        silverAndLab: pricingDetails?.SilverAndLabsDuties ?? client?.Pricing?.SilverAndLabsDuties ?? 0,
-        lossAndLabour: pricingDetails?.LossAndLabourDuties ?? client?.Pricing?.LossAndLabourDuties ?? 0
+    const duties = isRecalculate ? {
+        natural: pricingDetails?.NaturalDuties ?? 0,
+        lab: pricingDetails?.LabDuties ?? 0,
+        gold: pricingDetails?.GoldDuties ?? 0,
+        silverAndLab: pricingDetails?.SilverAndLabsDuties ?? 0,
+        lossAndLabour: pricingDetails?.LossAndLabourDuties ?? 0
+    } : {
+        natural: client?.Pricing?.NaturalDuties ?? pricingDetails?.NaturalDuties ?? 0,
+        lab: client?.Pricing?.LabDuties ?? pricingDetails?.LabDuties ?? 0,
+        gold: client?.Pricing?.GoldDuties ?? pricingDetails?.GoldDuties ?? 0,
+        silverAndLab: client?.Pricing?.SilverAndLabsDuties ?? pricingDetails?.SilverAndLabsDuties ?? 0,
+        lossAndLabour: client?.Pricing?.LossAndLabourDuties ?? pricingDetails?.LossAndLabourDuties ?? 0
     };
 
-    const charges = {
-        loss: pricingDetails?.Loss ?? client?.Pricing?.Loss ?? 0,
-        labour: pricingDetails?.Labour ?? client?.Pricing?.Labour ?? 0,
-        extraCharges: pricingDetails?.ExtraCharges ?? client?.Pricing?.ExtraCharges ?? 0,
-        undercutPrice: pricingDetails?.UndercutPrice ?? client?.Pricing?.UndercutPrice ?? 0
+    const charges = isRecalculate ? {
+        loss: pricingDetails?.Loss ?? 0,
+        labour: pricingDetails?.Labour ?? 0,
+        extraCharges: pricingDetails?.ExtraCharges ?? 0,
+        undercutPrice: pricingDetails?.UndercutPrice ?? 0
+    } : {
+        loss: client?.Pricing?.Loss ?? pricingDetails?.Loss ?? 0,
+        labour: client?.Pricing?.Labour ?? pricingDetails?.Labour ?? 0,
+        extraCharges: client?.Pricing?.ExtraCharges ?? pricingDetails?.ExtraCharges ?? 0,
+        undercutPrice: client?.Pricing?.UndercutPrice ?? pricingDetails?.UndercutPrice ?? 0
     };
 
     let stones = pricingDetails.Stones;
 
-    if (client) {
+    if (!isRecalculate && client) {
         stones = stones.map(stone => {
             const match = findStoneMatch(stone, client.Pricing.Diamonds);
 
@@ -94,7 +104,8 @@ async function resolvePricingContext(pricingDetails, clientId) {
 function findStoneMatch(stone, pricingDiamonds) {
     const nonRoundType = "Natural";
     const isNaturalVariant = stone.Type === "NaturalRegular" || stone.Type === "NaturalLower" || stone.Type === "TYPE 1" || stone.Type === "TYPE 2" || stone.Type === "TYPE 3";
-    const isNonRound = stone.Shape !== roundIdentifier;
+    const stoneShape = normalizeShape(stone.Shape);
+    const isNonRound = !isRoundShape(stone.Shape);
 
     // Helper to parse normalized size to number for comparison
     const parseSizeValue = (size) => {
@@ -107,11 +118,11 @@ function findStoneMatch(stone, pricingDiamonds) {
 
     // Build filter based on type rules
     const baseFilter = (d) => {
-        const typeMatch = isNaturalVariant && isNonRound 
-            ? d.Type === nonRoundType 
+        const typeMatch = isNaturalVariant && isNonRound
+            ? d.Type === nonRoundType
             : d.Type === stone.Type;
-        
-        return typeMatch && d.Shape === stone.Shape;
+
+        return typeMatch && normalizeShape(d.Shape) === stoneShape;
     };
 
     // First try: Find all matching candidates by mm size >= stone's mm size
@@ -233,10 +244,19 @@ function calculatePricingEngine(context) {
     const dutiesAmount = Object.values(breakdown).reduce((a, b) => a + b, 0);
     console.log(`[pricing] dutiesAmount: ${dutiesAmount}`);
 
-    const totalPrice =
+    let totalPrice =
         (((metalPrice + diamondsPrice) * quantity) + dutiesAmount) *
         (1 + (charges.extraCharges / 100));
     console.log(`[pricing] totalPrice: ${totalPrice} (metalPrice: ${metalPrice}, diamondsPrice: ${diamondsPrice}, quantity: ${quantity}, dutiesAmount: ${dutiesAmount}, extraCharges: ${charges.extraCharges}%)`);
+
+    // Pricing is incomplete if any stone price is missing/0, or the metal rate/price is missing/0.
+    // An incomplete total is not trustworthy, so report it as 0. (No stones → only the metal check applies.)
+    const hasUnpricedStone = stones.some(stone => !(Number(stone.Price) > 0));
+    const metalUnpriced = !(metal.rate > 0) || !(metalPrice > 0);
+    if (hasUnpricedStone || metalUnpriced) {
+        console.log(`[pricing] totalPrice forced to 0 (hasUnpricedStone: ${hasUnpricedStone}, metalUnpriced: ${metalUnpriced})`);
+        totalPrice = 0;
+    }
 
     return {
         metalPrice,
@@ -247,7 +267,6 @@ function calculatePricingEngine(context) {
         totalPrice,
         totalPieces,
 
-        // 🔥 THIS IS THE KEY FIX
         bases: {
             natural: naturalBase,
             labGold: labGoldBase,
@@ -320,11 +339,12 @@ async function generatePricingMessage(pricingResponse, pricingMessageFormat) {
     try {
         const res = await openai.chat.completions.create({
             model: process.env.OPENAI_MODEL || 'gpt-4o',
+            temperature: 0,
             messages: [
                 {
                     role: 'system',
                     content: `You are a jewellery pricing message formatter. Format the pricing details according to the client's specified format template.
-The format template may include placeholders like {TotalPrice}, {MetalPrice}, {DiamondsPrice}, {DutiesAmount}, {DiamondWeight}, {TotalPieces}, etc.
+The format template may include placeholders like {TotalPrice}$, {MetalPrice}$, {DiamondsPrice}$, {DutiesAmount}$, {DiamondWeight}, {TotalPieces}, etc.
 Generate a professional, concise pricing message following the exact format provided.`,
                 },
                 {
@@ -341,8 +361,8 @@ Generate a professional, concise pricing message following the exact format prov
     }
 }
 
-async function calculatePricing(pricingDetails, clientId) {
-    const context = await resolvePricingContext(pricingDetails, clientId);
+async function calculatePricing(pricingDetails, clientId, isRecalculate = false) {
+    const context = await resolvePricingContext(pricingDetails, clientId, isRecalculate);
     const calculation = calculatePricingEngine(context);
     const result = formatPricingResponse(context, calculation);
 

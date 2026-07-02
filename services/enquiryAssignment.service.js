@@ -10,8 +10,7 @@ const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
 
 const STATUS_TO_ROLE_CODE = {
     'Coral': 'CO',
-    'Cad': 'CD',
-    'Approved Cad': 'CD',
+    'Cad': 'CD'
 };
 
 async function resolveRoleId(roleCode) {
