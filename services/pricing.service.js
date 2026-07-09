@@ -141,18 +141,19 @@ function findStoneMatch(stone, pricingDiamonds) {
         });
     }
 
-    // Fallback: If no mm size match, try matching by average weight >= stone's weight
+    // Fallback: If no mm size match, try matching by average weight/carat >= stone's weight.
+    // Non-round pricing rows often store the threshold in Carat and keep MmSize at 0.
     const weightCandidates = pricingDiamonds.filter(d => {
         if (!baseFilter(d)) return false;
-        const dbWeight = parseFloat(d.Weight) || 0;
+        const dbWeight = parseFloat(d.Weight ?? d.Carat) || 0;
         return dbWeight >= stoneWeight;
     });
 
     // Return the candidate with the smallest weight >= stone weight (closest threshold)
     if (weightCandidates.length > 0) {
         return weightCandidates.reduce((closest, current) => {
-            const closestWeight = parseFloat(closest.Weight) || 0;
-            const currentWeight = parseFloat(current.Weight) || 0;
+            const closestWeight = parseFloat(closest.Weight ?? closest.Carat) || 0;
+            const currentWeight = parseFloat(current.Weight ?? current.Carat) || 0;
             return currentWeight < closestWeight ? current : closest;
         });
     }

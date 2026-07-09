@@ -4,7 +4,7 @@ const SHAPE_SYNONYMS = {
     RD: 'RD', ROUND: 'RD', RND: 'RD', RB: 'RD', BR: 'RD',
     OV: 'OV', OVAL: 'OV',
     EM: 'EM', EMERALD: 'EM', EMRLD: 'EM', EC: 'EM',
-    PS: 'PS', PEAR: 'PS', PEARSHAPE: 'PS',
+    PS: 'PS', PE: 'PS', PEAR: 'PS', PEARSHAPE: 'PS',
     PR: 'PR', PRINCESS: 'PR', PRIN: 'PR',
     CU: 'CU', CUSHION: 'CU', CUSH: 'CU',
     MQ: 'MQ', MARQUISE: 'MQ', MARQ: 'MQ',
