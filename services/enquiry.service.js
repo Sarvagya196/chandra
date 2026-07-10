@@ -132,7 +132,7 @@ exports.createEnquiry = async (data, files = [], userId) => {
             ReferenceImages.push({
                 Id: uuidv4(),
                 Key: key,
-                Description: file.originalname,
+                Description: file.description || file.originalname,
                 MimeType: file.mimetype,
             });
         } catch (err) {
