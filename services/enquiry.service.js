@@ -999,10 +999,10 @@ async function handleCadUpload(enquiry, files, version, cadCode, userId, cost, i
 
     // Add a status history entry for Cad upload (AssignedTo carried forward from the last entry).
     appendStatusEntry(enquiry, {
-        status: 'Cad',
-        subStatus: isFinalVersion ? 'Final Cad Upload' : deriveCostSubStatus(asset),
+        status: isFinalVersion? 'Order Placement' : 'Cad',
+        subStatus: isFinalVersion ? null : deriveCostSubStatus(asset),
         addedBy: userId,
-        details: `CAD Version ${asset.Version} uploaded`,
+        details: `CAD Version ${isFinalVersion ? 'Final' : asset.Version} uploaded`,
     });
 
     await repo.updateEnquiry(enquiry._id, enquiry);
