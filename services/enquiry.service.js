@@ -1028,7 +1028,7 @@ async function handleReferenceImageUpload(enquiry, files, userId) {
             enquiry.ReferenceImages.push({
                 Id: uuidv4(),
                 Key: key,
-                Description: file.originalname
+                Description: file.description || file.originalname
             });
         }
     }
