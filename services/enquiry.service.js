@@ -121,18 +121,19 @@ exports.getEnquiriesByUserId = async (userId) => {
     return await repo.getEnquiriesByUserId(userId);
 };
 
-exports.createEnquiry = async (data, files = [], userId) => {
+exports.createEnquiry = async (data, files = [], userId, referenceImageDescriptions = []) => {
     const { AssignedTo, Status, ...rest } = data;
 
     // Upload reference images to S3 if provided
     const ReferenceImages = [];
-    for (const file of files) {
+    for (const [index, file] of files.entries()) {
         try {
             const key = await uploadToS3(file);
+            const description = referenceImageDescriptions[index] || file.originalname;
             ReferenceImages.push({
                 Id: uuidv4(),
                 Key: key,
-                Description: file.description || file.originalname,
+                Description: description,
                 MimeType: file.mimetype,
             });
         } catch (err) {

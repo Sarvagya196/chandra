@@ -54,8 +54,17 @@ exports.createEnquiry = async (req, res) => {
                 return res.status(400).json({ message: "Invalid JSON in 'data' field" });
             }
         }
+        let referenceImageDescriptions = [];
+        if (typeof req.body?.referenceImageDescriptions === 'string') {
+            try {
+                referenceImageDescriptions = JSON.parse(req.body.referenceImageDescriptions);
+            } catch {
+                return res.status(400).json({ message: "Invalid JSON in 'referenceImageDescriptions' field" });
+            }
+        }
+
         const files = req.files?.referenceImages || [];
-        const enquiry = await service.createEnquiry(data, files, userId);
+        const enquiry = await service.createEnquiry(data, files, userId, referenceImageDescriptions);
         res.status(201).json(enquiry);
     } catch (error) {
         console.error("Error creating enquiry:", error);
