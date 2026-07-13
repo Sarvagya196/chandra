@@ -275,7 +275,9 @@ function calculatePricingEngine(context) {
             gold: goldBase,
             silver: silverBase,
             lossAndLabour: lossAndLabourBase
-        }
+        },
+
+        naturalDutyBase: naturalBaseCappedForDuties
     };
 }
 
@@ -294,6 +296,44 @@ function formatPricingResponse(context, calc) {
             GoldDuties: calc.bases.gold > 0,
             SilverAndLabsDuties: calc.bases.labSilver > 0,
             LossAndLabourDuties: calc.bases.lossAndLabour > 0
+        },
+
+        Duties: {
+            ...(calc.naturalDutyBase > 0 && {
+                Natural: {
+                    Rate: context.duties.natural,
+                    BaseAmount: +(calc.naturalDutyBase * context.quantity).toFixed(3),
+                    Amount: +calc.breakdown.natural.toFixed(3)
+                }
+            }),
+            ...(calc.bases.labGold > 0 && {
+                Lab: {
+                    Rate: context.duties.lab,
+                    BaseAmount: +(calc.bases.labGold * context.quantity).toFixed(3),
+                    Amount: +calc.breakdown.lab.toFixed(3)
+                }
+            }),
+            ...(calc.bases.gold > 0 && {
+                Gold: {
+                    Rate: context.duties.gold,
+                    BaseAmount: +(calc.bases.gold * context.quantity).toFixed(3),
+                    Amount: +calc.breakdown.gold.toFixed(3)
+                }
+            }),
+            ...((calc.bases.labSilver + calc.bases.silver) > 0 && {
+                SilverAndLabs: {
+                    Rate: context.duties.silverAndLab,
+                    BaseAmount: +((calc.bases.labSilver + calc.bases.silver) * context.quantity).toFixed(3),
+                    Amount: +calc.breakdown.silverAndLab.toFixed(3)
+                }
+            }),
+            ...(calc.bases.lossAndLabour > 0 && {
+                LossAndLabour: {
+                    Rate: context.duties.lossAndLabour,
+                    BaseAmount: +(calc.bases.lossAndLabour * context.quantity).toFixed(3),
+                    Amount: +calc.breakdown.lossAndLabour.toFixed(3)
+                }
+            })
         },
 
         Metal: {
