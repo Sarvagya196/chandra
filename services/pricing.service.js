@@ -315,8 +315,8 @@ function formatPricingResponse(context, calc) {
         TotalDuties: +calc.dutiesWithoutUndercut.toFixed(3),
         TotalDutiesWithUndercut: +calc.dutiesAmount.toFixed(3),
         DutiesAmount: +calc.dutiesAmount.toFixed(3),
-        TotalPrice: +calc.totalPriceWithoutExtraCharges.toFixed(3),
-        TotalPriceWithExtraCharges: +calc.totalPrice.toFixed(3),
+        TotalPrice: +calc.totalPrice.toFixed(3),
+        TotalPriceWithoutExtraCharges: +calc.totalPriceWithoutExtraCharges.toFixed(3),
 
         Applicable: {
             NaturalDuties: calc.bases.natural > 0,
