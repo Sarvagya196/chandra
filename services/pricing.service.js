@@ -24,7 +24,7 @@ function normalizeMmSize(value) {
 async function resolvePricingContext(pricingDetails, clientId, isRecalculate = false) {
     const todaysMetalRates = await metalPricesService.getLatest();
 
-    const metalWeight = parseFloat(pricingDetails.Metal.Weight);
+    const metalWeight = parseFloat(pricingDetails.Metal.Weight) || 0;
     const metalQuality = pricingDetails.Metal.Quality;
     const metalRateOverride = pricingDetails.Metal.Rate;
     const quantity = pricingDetails.Quantity || 1;
@@ -245,10 +245,18 @@ function calculatePricingEngine(context) {
     const dutiesAmount = Object.values(breakdown).reduce((a, b) => a + b, 0);
     console.log(`[pricing] dutiesAmount: ${dutiesAmount}`);
 
+    const metalBase = metal.weight * metal.rate;
+
+    const naturalDutyWithoutUndercut = naturalBase * quantity * duties.natural / 100;
+    const dutiesWithoutUndercut = dutiesAmount - breakdown.natural + naturalDutyWithoutUndercut;
+
     let totalPrice =
         (((metalPrice + diamondsPrice) * quantity) + dutiesAmount) *
         (1 + (charges.extraCharges / 100));
     console.log(`[pricing] totalPrice: ${totalPrice} (metalPrice: ${metalPrice}, diamondsPrice: ${diamondsPrice}, quantity: ${quantity}, dutiesAmount: ${dutiesAmount}, extraCharges: ${charges.extraCharges}%)`);
+
+    let totalPriceWithoutExtraCharges = ((metalPrice + diamondsPrice) * quantity) + dutiesAmount;
+    console.log(`[pricing] totalPriceWithoutExtraCharges: ${totalPriceWithoutExtraCharges}`);
 
     // Pricing is incomplete if any stone price is missing/0, or the metal rate/price is missing/0.
     // An incomplete total is not trustworthy, so report it as 0. (No stones → only the metal check applies.)
@@ -257,15 +265,21 @@ function calculatePricingEngine(context) {
     if (hasUnpricedStone || metalUnpriced) {
         console.log(`[pricing] totalPrice forced to 0 (hasUnpricedStone: ${hasUnpricedStone}, metalUnpriced: ${metalUnpriced})`);
         totalPrice = 0;
+        totalPriceWithoutExtraCharges = 0;
     }
 
     return {
+        metalBase,
+        lossAmount,
+        labourAmount,
         metalPrice,
         diamondsPrice,
         diamondWeight,
         dutiesAmount,
+        dutiesWithoutUndercut,
         breakdown,
         totalPrice,
+        totalPriceWithoutExtraCharges,
         totalPieces,
 
         bases: {
@@ -284,11 +298,25 @@ function calculatePricingEngine(context) {
 function formatPricingResponse(context, calc) {
     console.log(context);
     return {
+        MetalKT: context.metal.quality,
+        GoldRate24K: +context.metal.fullRate.toFixed(3),
+        GoldRateKT: +context.metal.rate.toFixed(3),
+        LossPercent: context.charges.loss,
+        LabourPercent: context.charges.labour,
+        ExtraChargesPercent: context.charges.extraCharges,
+        ExtraChargesAmount: +(calc.totalPrice - calc.totalPriceWithoutExtraCharges).toFixed(3),
+        GoldWeight: context.metal.weight,
+        GoldAmount: +calc.metalBase.toFixed(3),
+        LossAmount: +calc.lossAmount.toFixed(3),
+        LabourAmount: +calc.labourAmount.toFixed(3),
+        GoldIncludingLabour: +calc.metalPrice.toFixed(3),
         MetalPrice: +calc.metalPrice.toFixed(3),
         DiamondsPrice: +calc.diamondsPrice.toFixed(3),
-        TotalPrice: +calc.totalPrice.toFixed(3),
-
+        TotalDuties: +calc.dutiesWithoutUndercut.toFixed(3),
+        TotalDutiesWithUndercut: +calc.dutiesAmount.toFixed(3),
         DutiesAmount: +calc.dutiesAmount.toFixed(3),
+        TotalPrice: +calc.totalPrice.toFixed(3),
+        TotalPriceWithoutExtraCharges: +calc.totalPriceWithoutExtraCharges.toFixed(3),
 
         Applicable: {
             NaturalDuties: calc.bases.natural > 0,
