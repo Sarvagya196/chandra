@@ -21,8 +21,8 @@ function deriveCostSubStatus(asset) {
     if (!p) return 'Cost Missing';
     const stones = p.Stones || [];
     const stonesPriced = stones.length > 0 && stones.every(s => Number(s.Price) > 0);
-    const metalRate = Number(p.Metal?.Rate) > 0;
-    return (stonesPriced && metalRate) ? 'Quotation Review' : 'Cost Missing';
+    const metalPriced = Number(p.MetalPrice) > 0;
+    return (stonesPriced && metalPriced) ? 'Quotation Review' : 'Cost Missing';
 }
 
 async function scopeClientFilter(queryParams, userId) {

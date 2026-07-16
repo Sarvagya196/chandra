@@ -151,3 +151,36 @@ async function createSubStatusCodelist() {
 }
 
 exports.createSubStatusCodelist = createSubStatusCodelist;
+
+async function createStoneShapesCodelist() {
+    const values = [
+        { Id: 1,  Code: 'RD', Name: 'Round' },
+        { Id: 2,  Code: 'OV', Name: 'Oval' },
+        { Id: 3,  Code: 'EM', Name: 'Emerald' },
+        { Id: 4,  Code: 'PS', Name: 'Pear' },
+        { Id: 5,  Code: 'PR', Name: 'Princess' },
+        { Id: 6,  Code: 'CU', Name: 'Cushion' },
+        { Id: 7,  Code: 'MQ', Name: 'Marquise' },
+        { Id: 8,  Code: 'RA', Name: 'Radiant' },
+        { Id: 9,  Code: 'AS', Name: 'Asscher' },
+        { Id: 10, Code: 'HT', Name: 'Heart' },
+        { Id: 11, Code: 'BG', Name: 'Baguette' },
+        { Id: 12, Code: 'TB', Name: 'Tapered Baguette' },
+        { Id: 13, Code: 'TR', Name: 'Trillion' },
+        { Id: 14, Code: 'HM', Name: 'Half Moon' },
+        { Id: 15, Code: 'SQ', Name: 'Square' },
+    ];
+
+    try {
+        const newCodelist = new Codelist({
+            Type: 'StoneShapes',
+            Values: values
+        });
+        const result = await newCodelist.save();
+        console.log("Successfully created Codelist for 'StoneShapes':", result);
+    } catch (err) {
+        console.error("Error creating StoneShapes Codelist:", err);
+    }
+}
+
+exports.createStoneShapesCodelist = createStoneShapesCodelist;

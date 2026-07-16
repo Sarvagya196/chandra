@@ -1299,7 +1299,7 @@ const swaggerSpec = {
                     {
                         in: 'path', name: 'name', required: true,
                         schema: { type: 'string' },
-                        description: 'Codelist type, e.g. Roles, Status, StoneTypes',
+                        description: 'Codelist type, e.g. Roles, Status, StoneTypes, StoneShapes',
                     },
                 ],
                 responses: {
