@@ -546,12 +546,13 @@ exports.updateAssetData = async (enquiryId, type, version, data, userId) => {
                     updatedCoral.IsApprovedVersion = data.IsApprovedVersion;
                     if (data.IsApprovedVersion === true) {
                         // Coral approved → CAD phase begins; a designer must be assigned to make the CAD.
+                        updatedCoral.ReasonForRejection = data.ReasonForRejection || "";
                         appendStatusEntry(enquiry, {
                             status: 'Cad',
                             subStatus: deriveSubStatus('Cad', { assignedTo: null }),
                             assignedTo: null,
                             addedBy: userId,
-                            details: "Coral Approved",
+                            details: "Coral Approved - " + (data.ReasonForRejection ?? ""),
                         });
                     } else {
                         updatedCoral.ReasonForRejection = data.ReasonForRejection || "";
@@ -640,11 +641,12 @@ exports.updateAssetData = async (enquiryId, type, version, data, userId) => {
                 if (data.IsApprovedVersion !== undefined && data.IsApprovedVersion !== null) {
                     updatedCad.IsApprovedVersion = data.IsApprovedVersion;
                     if (data.IsApprovedVersion === true) {
+                        updatedCad.ReasonForRejection = data.ReasonForRejection || "";
                         appendStatusEntry(enquiry, {
                             status: 'Cad',
                             subStatus: 'Final Cad Upload',
                             addedBy: userId,
-                            details: "Cad Design Approved - Final CAD required",
+                            details: "Cad Design Approved - Final CAD required -" + (data.ReasonForRejection ?? ""),
                         });
                     } else {
                         updatedCad.ReasonForRejection = data.ReasonForRejection || "";
@@ -652,7 +654,7 @@ exports.updateAssetData = async (enquiryId, type, version, data, userId) => {
                             status: 'Cad',
                             subStatus: 'Rejected - Redo',
                             addedBy: userId,
-                            details: "Cad Rejected - " + data.ReasonForRejection ?? "",
+                            details: "Cad Rejected - " + (data.ReasonForRejection ?? ""),
                         });
                     }
                 }
