@@ -21,7 +21,7 @@ function normalizeMmSize(value) {
     return normalizeNumber(value);
 }
 
-async function resolvePricingContext(pricingDetails, clientId, isRecalculate = false) {
+async function resolvePricingContext(pricingDetails, clientId, isOnlyMetalDesign = false, isRecalculate = false) {
     const todaysMetalRates = await metalPricesService.getLatest();
 
     const metalWeight = parseFloat(pricingDetails.Metal.Weight) || 0;
@@ -88,6 +88,10 @@ async function resolvePricingContext(pricingDetails, clientId, isRecalculate = f
                 Markup: 0
             };
         });
+    }
+
+    if (isOnlyMetalDesign) {
+        stones = [];
     }
 
     return {
@@ -430,8 +434,8 @@ Generate a professional, concise pricing message following the exact format prov
     }
 }
 
-async function calculatePricing(pricingDetails, clientId, isRecalculate = false) {
-    const context = await resolvePricingContext(pricingDetails, clientId, isRecalculate);
+async function calculatePricing(pricingDetails, clientId, isOnlyMetalDesign = false, isRecalculate = false) {
+    const context = await resolvePricingContext(pricingDetails, clientId, isOnlyMetalDesign, isRecalculate);
     const calculation = calculatePricingEngine(context);
     const result = formatPricingResponse(context, calculation);
 
