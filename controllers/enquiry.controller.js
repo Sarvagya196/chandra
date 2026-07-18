@@ -104,9 +104,10 @@ exports.uploadAssets = async (req, res) => {
     const code = req.body.code; // CadCode or CoralCode
     const cost = req.body.cost; // Optional numeric cost for this Coral / Cad version
     const isFinalVersion = req.body.isFinalVersion === true; // Flag for Final CAD upload
+    const isOnlyMetalDesign = req.body.isOnlyMetalDesign === true;
 
     try {
-      const result = await service.handleAssetUpload(id, type, files, version, code, userId, cost, isFinalVersion);
+      const result = await service.handleAssetUpload(id, type, files, version, code, userId, cost, isFinalVersion, isOnlyMetalDesign);
       res.status(200).json({ message: 'Upload successful', data: result });
     } catch (err) {
       console.error(err);
@@ -151,11 +152,11 @@ exports.getPresignedFileUrl = async (req, res) => {
 
 exports.getPricing = async (req, res) => {
     try {
-        const { details: detailsJson, clientId, isRecalculate = false } = req.body;
+        const { details: detailsJson, clientId, isRecalculate = false, isOnlyMetalDesign = false } = req.body;
         if (!detailsJson) {
             return res.status(400).json({ message: "Details parameter is required" });
         }
-        const pricing = await service.calculatePricing(detailsJson, clientId, isRecalculate);
+        const pricing = await service.calculatePricing(detailsJson, clientId, isOnlyMetalDesign, isRecalculate);
         res.json(pricing);
     } catch (error) {
         console.error("Error calculating pricing:", error);

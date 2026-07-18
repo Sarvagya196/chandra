@@ -20,7 +20,7 @@ function deriveCostSubStatus(asset) {
     const p = Array.isArray(asset?.Pricing) ? asset.Pricing[0] : null;
     if (!p) return 'Cost Missing';
     const stones = p.Stones || [];
-    const stonesPriced = stones.length > 0 && stones.every(s => Number(s.Price) > 0);
+    const stonesPriced = asset.IsOnlyMetalDesign ? true : (stones.length > 0 && stones.every(s => Number(s.Price) > 0));
     const metalPriced = Number(p.MetalPrice) > 0;
     return (stonesPriced && metalPriced) ? 'Quotation Review' : 'Cost Missing';
 }
@@ -457,7 +457,7 @@ exports.updateEnquiry = async (id, data, userId) => {
     return { _id: enquiry._id };
 };
 
-exports.handleAssetUpload = async (id, type, files, version, code, userId, cost, isFinalVersion = false) => {
+exports.handleAssetUpload = async (id, type, files, version, code, userId, cost, isFinalVersion = false, isOnlyMetalDesign = false) => {
     const enquiry = await repo.getEnquiryById(id);
     if (!enquiry) throw new Error('Enquiry not found');
 
@@ -471,10 +471,10 @@ exports.handleAssetUpload = async (id, type, files, version, code, userId, cost,
     let uploadResult;
     switch (type) {
         case 'coral':
-            uploadResult = await handleCoralUpload(enquiry, files, version, code, userId, parsedCost);
+            uploadResult = await handleCoralUpload(enquiry, files, version, code, userId, parsedCost, isOnlyMetalDesign);
             break;
         case 'cad':
-            uploadResult = await handleCadUpload(enquiry, files, version, code, userId, parsedCost, isFinalVersion);
+            uploadResult = await handleCadUpload(enquiry, files, version, code, userId, parsedCost, isFinalVersion, isOnlyMetalDesign);
             break;
         case 'reference':
             uploadResult = await handleReferenceImageUpload(enquiry, files, userId);
@@ -593,6 +593,10 @@ exports.updateAssetData = async (enquiryId, type, version, data, userId) => {
                     updatedCoral.Cost = parsedCost;
                 }
 
+                if (data.IsOnlyMetalDesign !== undefined && data.IsOnlyMetalDesign !== null) {
+                    updatedCoral.IsOnlyMetalDesign = data.IsOnlyMetalDesign;
+                }
+
                 if (data.Description && data.Id) {
                     updatedCoral.Images = updatedCoral.Images.map(image => {
                         if (image.Id === data.Id) {
@@ -687,6 +691,10 @@ exports.updateAssetData = async (enquiryId, type, version, data, userId) => {
                     updatedCad.Cost = parsedCost;
                 }
 
+                if (data.IsOnlyMetalDesign !== undefined && data.IsOnlyMetalDesign !== null) {
+                    updatedCad.IsOnlyMetalDesign = data.IsOnlyMetalDesign;
+                }
+
                 if (data.SendForApproval === true) {
                     appendStatusEntry(enquiry, {
                         status: 'Design Approval Pending',
@@ -751,7 +759,7 @@ exports.updateAssetData = async (enquiryId, type, version, data, userId) => {
 };
 
 
-async function handleCoralUpload(enquiry, files, version, coralCode, userId, cost) {
+async function handleCoralUpload(enquiry, files, version, coralCode, userId, cost, isOnlyMetalDesign = false) {
 
     const assetVersion = version || 'Version 1';
     let asset = enquiry.Coral.find(a => a.Version === assetVersion);
@@ -764,10 +772,12 @@ async function handleCoralUpload(enquiry, files, version, coralCode, userId, cos
             Pricing: null,
             CoralCode: coralCode || '',
             Cost: cost,
+            IsOnlyMetalDesign: isOnlyMetalDesign,
             IsApprovedVersion: false
         };
-    } else if (cost !== undefined) {
-        asset.Cost = cost;
+    } else {
+        if (cost !== undefined) asset.Cost = cost;
+        if (isOnlyMetalDesign) asset.IsOnlyMetalDesign = true;
     }
 
     
@@ -815,6 +825,10 @@ async function handleCoralUpload(enquiry, files, version, coralCode, userId, cos
             Quality: enquiry.Metal.Quality || tableJson.Metal.Quality || null,
         };
         tableJson.Quantity = enquiry.Quantity || 1;
+
+        if (asset.IsOnlyMetalDesign) {
+            tableJson.Stones = [];
+        }
 
         let pricing = await exports.calculatePricing(tableJson, enquiry.ClientId);
 
@@ -886,7 +900,7 @@ async function handleCoralUpload(enquiry, files, version, coralCode, userId, cos
     return { _id: enquiry._id };
 }
 
-async function handleCadUpload(enquiry, files, version, cadCode, userId, cost, isFinalVersion = false) {
+async function handleCadUpload(enquiry, files, version, cadCode, userId, cost, isFinalVersion = false, isOnlyMetalDesign = false) {
     const assetVersion = version || 'Version 1';
     let asset = enquiry.Cad.find(a => a.Version === assetVersion);
 
@@ -898,11 +912,13 @@ async function handleCadUpload(enquiry, files, version, cadCode, userId, cost, i
             Pricing: null,
             CadCode: cadCode || '',
             Cost: cost,
+            IsOnlyMetalDesign: isOnlyMetalDesign,
             IsFinalVersion: isFinalVersion
         };
     } else {
         if (cost !== undefined) asset.Cost = cost;
         if (isFinalVersion) asset.IsFinalVersion = true;
+        if (isOnlyMetalDesign) asset.IsOnlyMetalDesign = true;
     }
 
     const newCadUploads = [];
@@ -949,6 +965,10 @@ async function handleCadUpload(enquiry, files, version, cadCode, userId, cost, i
             Quality: enquiry.Metal.Quality || tableJson.Metal.Quality || null,
         };
         tableJson.Quantity = enquiry.Quantity || 1;
+
+        if (asset.IsOnlyMetalDesign) {
+            tableJson.Stones = [];
+        }
 
         let pricing = await exports.calculatePricing(tableJson, enquiry.ClientId);
 

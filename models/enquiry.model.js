@@ -120,6 +120,7 @@ const enquirySchema = new mongoose.Schema({
         Version: String,
         CoralCode: String,
         Cost: Number,
+        IsOnlyMetalDesign: Boolean,
         Images: [{
             Id: String,
             Key: String,
@@ -141,6 +142,7 @@ const enquirySchema = new mongoose.Schema({
         Version: String,
         CadCode: String,
         Cost: Number,
+        IsOnlyMetalDesign: Boolean,
         Images: [{
             Id: String,
             Key: String,
