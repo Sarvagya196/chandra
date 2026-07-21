@@ -45,7 +45,10 @@ const mongoose = require('mongoose');
     LossAndLabourDuties: { type: Number, default: 0 },
     Loss: { type: Number, default: 0 },
     Labour: { type: Number, default: 0 },
-    ExtraCharges: { type: Number, default: 0 },
+    ExtraCharges: {
+        Type: { type: String, enum: ['percentage', 'fixed'], default: 'percentage' },
+        Value: { type: Number, default: 0 }
+    },
     DiamondWeight: Number,
     TotalPieces: Number,
     ClientPricingMessage: { type: String, default: null },
