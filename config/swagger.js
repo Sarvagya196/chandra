@@ -52,7 +52,14 @@ const swaggerSpec = {
                         properties: {
                             Loss:                { type: 'number' },
                             Labour:              { type: 'number' },
-                            ExtraCharges:        { type: 'number' },
+                            ExtraCharges: {
+                                type: 'object',
+                                properties: {
+                                    Type:  { type: 'string', enum: ['percentage', 'fixed'] },
+                                    Value: { type: 'number' },
+                                },
+                                description: 'Extra charge applied to the total — either a percentage or a fixed amount.',
+                            },
                             NaturalDuties:       { type: 'number', description: 'Duty % on natural diamond value' },
                             LabDuties:           { type: 'number', description: 'Duty % on lab diamond value (when metal is gold)' },
                             GoldDuties:          { type: 'number', description: 'Duty % on gold metal value' },
@@ -311,7 +318,13 @@ const swaggerSpec = {
                     LossAndLabourDuties:  { type: 'number' },
                     Loss:                 { type: 'number' },
                     Labour:               { type: 'number' },
-                    ExtraCharges:         { type: 'number' },
+                    ExtraCharges: {
+                        type: 'object',
+                        properties: {
+                            Type:  { type: 'string', enum: ['percentage', 'fixed'] },
+                            Value: { type: 'number' },
+                        },
+                    },
                     UndercutPrice:        { type: 'number' },
                     DiamondWeight:        { type: 'number' },
                     TotalPieces:          { type: 'number' },
@@ -392,7 +405,13 @@ const swaggerSpec = {
                     Stones: { type: 'array', items: { $ref: '#/components/schemas/PricingStoneInput' } },
                     Loss:                { type: 'number' },
                     Labour:              { type: 'number' },
-                    ExtraCharges:        { type: 'number' },
+                    ExtraCharges: {
+                        type: 'object',
+                        properties: {
+                            Type:  { type: 'string', enum: ['percentage', 'fixed'] },
+                            Value: { type: 'number' },
+                        },
+                    },
                     UndercutPrice:       { type: 'number' },
                     NaturalDuties:       { type: 'number' },
                     LabDuties:           { type: 'number' },
@@ -437,7 +456,13 @@ const swaggerSpec = {
                         properties: {
                             Loss:                { type: 'number' },
                             Labour:              { type: 'number' },
-                            ExtraCharges:        { type: 'number' },
+                            ExtraCharges: {
+                                type: 'object',
+                                properties: {
+                                    Type:  { type: 'string', enum: ['percentage', 'fixed'] },
+                                    Value: { type: 'number' },
+                                },
+                            },
                             UndercutPrice:       { type: 'number' },
                             NaturalDuties:       { type: 'number' },
                             LabDuties:           { type: 'number' },

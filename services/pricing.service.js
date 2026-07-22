@@ -28,6 +28,7 @@ async function resolvePricingContext(pricingDetails, clientId, isOnlyMetalDesign
     const metalQuality = pricingDetails.Metal.Quality;
     const metalRateOverride = pricingDetails.Metal.Rate;
     const quantity = pricingDetails.Quantity || 1;
+    
 
     let metalRate, metalFullRate;
 
@@ -67,12 +68,12 @@ async function resolvePricingContext(pricingDetails, clientId, isOnlyMetalDesign
     const charges = isRecalculate ? {
         loss: pricingDetails?.Loss ?? 0,
         labour: pricingDetails?.Labour ?? 0,
-        extraCharges: pricingDetails?.ExtraCharges ?? 0,
+        extraCharges: pricingDetails?.ExtraCharges ?? { Type: 'percentage', Value: 0 },
         undercutPrice: pricingDetails?.UndercutPrice ?? 0
     } : {
         loss: client?.Pricing?.Loss ?? pricingDetails?.Loss ?? 0,
         labour: client?.Pricing?.Labour ?? pricingDetails?.Labour ?? 0,
-        extraCharges: client?.Pricing?.ExtraCharges ?? pricingDetails?.ExtraCharges ?? 0,
+        extraCharges: client?.Pricing?.ExtraCharges ?? pricingDetails?.ExtraCharges ?? { Type: 'percentage', Value: 0 },
         undercutPrice: client?.Pricing?.UndercutPrice ?? pricingDetails?.UndercutPrice ?? 0
     };
 
@@ -254,10 +255,14 @@ function calculatePricingEngine(context) {
     const naturalDutyWithoutUndercut = naturalBase * quantity * duties.natural / 100;
     const dutiesWithoutUndercut = dutiesAmount - breakdown.natural + naturalDutyWithoutUndercut;
 
-    let totalPrice =
-        (((metalPrice + diamondsPrice) * quantity) + dutiesAmount) *
-        (1 + (charges.extraCharges / 100));
-    console.log(`[pricing] totalPrice: ${totalPrice} (metalPrice: ${metalPrice}, diamondsPrice: ${diamondsPrice}, quantity: ${quantity}, dutiesAmount: ${dutiesAmount}, extraCharges: ${charges.extraCharges}%)`);
+    let totalPrice;
+    if (charges.extraCharges.Type === 'fixed') {
+        totalPrice = (((metalPrice + diamondsPrice) * quantity) + dutiesAmount) + charges.extraCharges.Value;
+        console.log(`[pricing] totalPrice: ${totalPrice} (metalPrice: ${metalPrice}, diamondsPrice: ${diamondsPrice}, quantity: ${quantity}, dutiesAmount: ${dutiesAmount}, extraCharges: +${charges.extraCharges.Value} fixed)`);
+    } else {
+        totalPrice = (((metalPrice + diamondsPrice) * quantity) + dutiesAmount) * (1 + (charges.extraCharges.Value / 100));
+        console.log(`[pricing] totalPrice: ${totalPrice} (metalPrice: ${metalPrice}, diamondsPrice: ${diamondsPrice}, quantity: ${quantity}, dutiesAmount: ${dutiesAmount}, extraCharges: ${charges.extraCharges.Value}%)`);
+    }
 
     let totalPriceWithoutExtraCharges = ((metalPrice + diamondsPrice) * quantity) + dutiesAmount;
     console.log(`[pricing] totalPriceWithoutExtraCharges: ${totalPriceWithoutExtraCharges}`);
@@ -305,9 +310,11 @@ function formatPricingResponse(context, calc) {
         MetalKT: context.metal.quality,
         GoldRate24K: +context.metal.fullRate.toFixed(3),
         GoldRateKT: +context.metal.rate.toFixed(3),
+        GoldRatePerOunce: +(context.metal.fullRate * 31.1035).toFixed(3),
         LossPercent: context.charges.loss,
         LabourPercent: context.charges.labour,
-        ExtraChargesPercent: context.charges.extraCharges,
+        ExtraChargesType: context.charges.extraCharges.Type,
+        ExtraChargesPercent: context.charges.extraCharges.Type === 'percentage' ? context.charges.extraCharges.Value : 0,
         ExtraChargesAmount: +(calc.totalPrice - calc.totalPriceWithoutExtraCharges).toFixed(3),
         GoldWeight: context.metal.weight,
         GoldAmount: +calc.metalBase.toFixed(3),
