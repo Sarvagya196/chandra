@@ -130,7 +130,7 @@ async function validateAndRetryRows(stones, preprocessedBase64, mimeType) {
                 role: 'user',
                 parts: [
                     {
-                        text: `These rows failed validation (PCS × WT should equal CT WT). Re-read these specific rows from the image EXACTLY. Rules: preserve decimals, leading zeros, sieve sizes, and shape names. Do not estimate. If unreadable, set that field to null:\n\n${JSON.stringify(bad, null, 2)}`
+                        text: `These rows failed validation (PCS × WT should equal CT WT). Re-read these specific rows from the image EXACTLY. Rules: preserve decimals, leading zeros, sieve sizes, and shape names. Do not estimate. If unreadable, set that field to null:\n\n${JSON.stringify(InvalidRows, null, 2)}`
                     },
                     { inlineData: { mimeType, data: preprocessedBase64 } }
                 ]
@@ -145,7 +145,7 @@ async function validateAndRetryRows(stones, preprocessedBase64, mimeType) {
         const retried = JSON.parse(retryResponse.response.text()) || [];
         const remaining = [];
         for (const r of retried) {
-            if (validateRow(r)) good.push(r);
+            if (validateRow(r)) ValidatedRows.push(r);
             else remaining.push(r);
         }
         bad.length = 0;
