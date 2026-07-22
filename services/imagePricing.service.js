@@ -1,5 +1,36 @@
+const sharp = require('sharp');
 const { calculatePricing } = require('./pricing.service');
 const { preprocessImage, extractTableWithTesseract, reconcileWithGemini, validateAndRetryRows } = require('./ocr.service');
+
+// Crop the image to the region the user marked on the frontend, given as fractions (0..1)
+// of the original image. Cropping happens here at full resolution so the device never has to
+// (on-device cropping degraded the image on iOS). Returns the original buffer when there is
+// no crop or it covers the whole image.
+async function cropByFractions(buffer, crop) {
+    if (!crop) {
+        console.log('[crop][service] no crop → using whole image');
+        return buffer;
+    }
+    const { x = 0, y = 0, w = 1, h = 1 } = crop;
+    if (!(x > 0) && !(y > 0) && !(w < 1) && !(h < 1)) {
+        console.log('[crop][service] crop covers whole image → skipping', crop);
+        return buffer;
+    }
+    const meta = await sharp(buffer).rotate().metadata(); // .rotate() applies EXIF orientation
+    const W = meta.width, H = meta.height;
+    if (!W || !H) {
+        console.log('[crop][service] could not read dimensions → using whole image', { W, H });
+        return buffer;
+    }
+    const left = Math.max(0, Math.min(W - 1, Math.round(x * W)));
+    const top = Math.max(0, Math.min(H - 1, Math.round(y * H)));
+    const width = Math.max(1, Math.min(W - left, Math.round(w * W)));
+    const height = Math.max(1, Math.min(H - top, Math.round(h * H)));
+    console.log('[crop][service] cropping', { fractions: crop, imageSize: { W, H }, extract: { left, top, width, height } });
+    const out = await sharp(buffer).rotate().extract({ left, top, width, height }).toBuffer();
+    console.log('[crop][service] cropped buffer bytes', out.length);
+    return out;
+}
 
 async function extractPricingDataFromImage(imageBuffer, mimeType) {
     const preprocessed = await preprocessImage(imageBuffer);
@@ -25,8 +56,10 @@ function validateExtracted(data) {
     return data;
 }
 
-exports.extractAndPrice = async ({ imageBuffer, mimeType, clientId, stoneType, quantity, metalQuality }) => {
-    const extracted = validateExtracted(await extractPricingDataFromImage(imageBuffer, mimeType));
+exports.extractAndPrice = async ({ imageBuffer, mimeType, clientId, stoneType, quantity, metalQuality, crop }) => {
+    let workingBuffer = await cropByFractions(imageBuffer, crop);
+    const extracted = validateExtracted(await extractPricingDataFromImage(workingBuffer, mimeType));
+    workingBuffer = null; // release the (possibly large) buffer promptly
 
     const resolvedMetalQuality = metalQuality || extracted.Metal?.Quality || null;
 
