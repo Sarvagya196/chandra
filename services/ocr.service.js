@@ -34,7 +34,7 @@ const extractionSchema = {
     required: ["Stones", "Metal", "TotalPieces"]
 };
 
-const model = genAI.getGenerativeModel({ model: 'gemini-2.5-flash' });
+const model = genAI.getGenerativeModel({ model: 'gemini-2.5-pro' });
 
 async function preprocessImage(buffer) {
     return await sharp(buffer)
@@ -110,14 +110,14 @@ async function validateAndRetryRows(stones, preprocessedBase64, mimeType) {
     if (!stones || stones.length === 0) return stones || [];
 
     const ValidatedRows = [];
-    const UnvalidRows = [];
+    const InvalidRows = [];
 
     for (const stone of stones) {
         if (validateRow(stone)) ValidatedRows.push(stone);
-        else UnvalidRows.push(stone);
+        else InvalidRows.push(stone);
     }
 
-    if (UnvalidRows.length === 0) return ValidatedRows;
+    if (InvalidRows.length === 0) return ValidatedRows;
 
     if (ValidatedRows.length === 0) {
         console.warn('[ocr] All rows failed validation. Returning raw extraction as best effort.');
@@ -148,17 +148,17 @@ async function validateAndRetryRows(stones, preprocessedBase64, mimeType) {
             if (validateRow(r)) good.push(r);
             else remaining.push(r);
         }
-        UnvalidRows.length = 0;
-        UnvalidRows.push(...remaining);
-        if (UnvalidRows.length === 0) break;
+        InvalidRows.length = 0;
+        InvalidRows.push(...remaining);
+        if (InvalidRows.length === 0) break;
     }
 
-    if (UnvalidRows.length > 0) {
+    if (InvalidRows.length > 0) {
         // Never drop a row (that loses a whole stone). Reconcile the three related columns
         // (CT WT = PCS x WT) by trusting the two that are present, then apply safety
         // validations so nothing downstream gets NaN / negatives.
-        console.warn(`[ocr] ${UnvalidRows.length} rows still failing after retries — reconciling instead of dropping:`, UnvalidRows);
-        for (const r of UnvalidRows) {
+        console.warn(`[ocr] ${InvalidRows.length} rows still failing after retries — reconciling instead of dropping:`, InvalidRows);
+        for (const r of InvalidRows) {
             ValidatedRows.push(reconcileRow(r));
         }
     }
