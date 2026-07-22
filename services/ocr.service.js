@@ -109,17 +109,17 @@ function validateRow(row) {
 async function validateAndRetryRows(stones, preprocessedBase64, mimeType) {
     if (!stones || stones.length === 0) return stones || [];
 
-    const good = [];
-    const bad = [];
+    const ValidatedRows = [];
+    const InvalidRows = [];
 
     for (const stone of stones) {
-        if (validateRow(stone)) good.push(stone);
-        else bad.push(stone);
+        if (validateRow(stone)) ValidatedRows.push(stone);
+        else InvalidRows.push(stone);
     }
 
-    if (bad.length === 0) return good;
+    if (InvalidRows.length === 0) return ValidatedRows;
 
-    if (good.length === 0) {
+    if (ValidatedRows.length === 0) {
         console.warn('[ocr] All rows failed validation. Returning raw extraction as best effort.');
         return stones;
     }
@@ -148,16 +148,45 @@ async function validateAndRetryRows(stones, preprocessedBase64, mimeType) {
             if (validateRow(r)) good.push(r);
             else remaining.push(r);
         }
-        bad.length = 0;
-        bad.push(...remaining);
-        if (bad.length === 0) break;
+        InvalidRows.length = 0;
+        InvalidRows.push(...remaining);
+        if (InvalidRows.length === 0) break;
     }
 
-    if (bad.length > 0) {
-        console.warn(`[ocr] ${bad.length} rows still failing validation after retries:`, bad);
+    if (InvalidRows.length > 0) {
+        // Never drop a row (that loses a whole stone). Reconcile the three related columns
+        // (CT WT = PCS x WT) by trusting the two that are present, then apply safety
+        // validations so nothing downstream gets NaN / negatives.
+        console.warn(`[ocr] ${InvalidRows.length} rows still failing after retries — reconciling instead of dropping:`, InvalidRows);
+        for (const r of InvalidRows) {
+            ValidatedRows.push(reconcileRow(r));
+        }
     }
 
-    return good;
+    return ValidatedRows;
+}
+
+// Make a stone row internally consistent (CT WT = PCS x WT) when the OCR values disagree,
+// then guard against unusable numbers. Order of trust: PCS and WT are the directly-read
+// columns, so prefer recomputing CT WT; if one of them is missing, derive it from CT WT.
+function reconcileRow(r) {
+    const ok = (v) => Number.isFinite(Number(v)) && Number(v) >= 0;
+    const p = Number(r.Pcs), w = Number(r.Weight), c = Number(r.CtWeight);
+
+    if (ok(p) && ok(w)) {
+        r.CtWeight = +(p * w).toFixed(3);              // trust PCS & WT → recompute CT WT
+    } else if (ok(p) && p > 0 && ok(c)) {
+        r.Weight = +(c / p).toFixed(4);                // WT unreadable → derive from CT WT / PCS
+    } else if (ok(w) && w > 0 && ok(c)) {
+        r.Pcs = Math.round(c / w);                     // PCS unreadable → derive from CT WT / WT
+        r.CtWeight = +(r.Pcs * w).toFixed(3);
+    }
+
+    // Safety validations: PCS is a non-negative integer, WT/CT WT are non-negative finite.
+    r.Pcs = Number.isFinite(Number(r.Pcs)) ? Math.max(0, Math.round(Number(r.Pcs))) : 0;
+    r.Weight = Number.isFinite(Number(r.Weight)) ? Math.max(0, Number(r.Weight)) : 0;
+    r.CtWeight = Number.isFinite(Number(r.CtWeight)) ? Math.max(0, Number(r.CtWeight)) : 0;
+    return r;
 }
 
 module.exports = { preprocessImage, extractTableWithTesseract, reconcileWithGemini, validateRow, validateAndRetryRows };
