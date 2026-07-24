@@ -1,8 +1,8 @@
-const OpenAI = require('openai');
+const { GoogleGenerativeAI } = require('@google/generative-ai');
 const clientService = require('./client.service');
 const codelistsService = require('./codelists.service');
 
-const client = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
+const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
 
 // ─── Required fields per media type ─────────────────────────────────────────
 // These are the fields that MUST be populated; anything missing becomes a missingField entry.
@@ -145,18 +145,17 @@ exports.parseEnquiryMessage = async ({ message, mediaType }) => {
         'Remarks':       [],
     };
 
-    const completion = await client.chat.completions.create({
-        model: process.env.OPENAI_MODEL || 'gpt-4o',
-        response_format: { type: 'json_object' },
-        messages: [
-            { role: 'system', content: buildSystemPrompt(clients, stoneTypeValues) },
-            { role: 'user', content: message },
-        ],
+    const model = genAI.getGenerativeModel({
+        model: 'gemini-3.6-flash',
+        systemInstruction: buildSystemPrompt(clients, stoneTypeValues),
+        generationConfig: { temperature: 0, responseMimeType: 'application/json' },
     });
+
+    const result = await model.generateContent(message);
 
     let parsed;
     try {
-        parsed = JSON.parse(completion.choices[0].message.content);
+        parsed = JSON.parse(result.response.text());
     } catch {
         throw new Error('LLM returned invalid JSON');
     }
