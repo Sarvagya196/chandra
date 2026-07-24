@@ -144,6 +144,7 @@ exports.postEnquiryCreateHook = async (enquiry) => {
     const refs = enquiry.ReferenceImages || [];
     const enriched = [];
 
+
     if (enriched.length > 0 && !enquiry.Category) {
         const votes = enriched.map(e => e.category).filter(Boolean);
         if (votes.length > 0) {
@@ -197,10 +198,10 @@ exports.postEnquiryCreateHook = async (enquiry) => {
     try {
         const seen = new Map();
         for (const e of enriched) {
-            const matches = await findSimilar({
+            const matches = await searchSimilarDesigns({
                 embedding: e.embedding,
                 limit: 5,
-                excludeEnquiryId: enquiry._id,
+                excludeDesignId: enquiry._id,
             });
             for (const m of matches) {
                 const key = String(m._id);
@@ -211,7 +212,7 @@ exports.postEnquiryCreateHook = async (enquiry) => {
         const top = Array.from(seen.values())
             .sort((a, b) => b.score - a.score)
             .slice(0, 5)
-            .map(m => ({ EnquiryId: m.EnquiryId, Key: m.Key, Score: m.score }));
+            .map(m => ({ EnquiryId: m.enquiryId, Key: m.Key, Score: m.score }));
 
         if (top.length > 0) {
             await repo.updateEnquiry(enquiry._id, { SimilarDesigns: top });
