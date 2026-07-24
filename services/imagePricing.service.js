@@ -1,6 +1,10 @@
 const sharp = require('sharp');
 const { calculatePricing } = require('./pricing.service');
 const { preprocessImage, extractTableWithTesseract, reconcileWithGemini, validateAndRetryRows } = require('./ocr.service');
+const { createConcurrencyLimiter } = require('../utils/concurrency');
+
+const MAX_CONCURRENT_PRICING = 3;
+const runPricingLimited = createConcurrencyLimiter(MAX_CONCURRENT_PRICING);
 
 // Crop the image to the region the user marked on the frontend, given as fractions (0..1)
 // of the original image. Cropping happens here at full resolution so the device never has to
@@ -33,10 +37,12 @@ async function cropByFractions(buffer, crop) {
 }
 
 async function extractPricingDataFromImage(imageBuffer, mimeType) {
-    const preprocessed = await preprocessImage(imageBuffer);
-    const preprocessedBase64 = preprocessed.toString('base64');
+    let preprocessed = await preprocessImage(imageBuffer);
+    imageBuffer = null;
 
     const ocrText = await extractTableWithTesseract(preprocessed);
+    const preprocessedBase64 = preprocessed.toString('base64');
+    preprocessed = null;
     console.log(`[ocr] Raw OCR text:\n${ocrText}`);
 
     const finalData = await reconcileWithGemini(preprocessedBase64, ocrText, mimeType);
@@ -56,10 +62,11 @@ function validateExtracted(data) {
     return data;
 }
 
-exports.extractAndPrice = async ({ imageBuffer, mimeType, clientId, stoneType, quantity, metalQuality, crop }) => {
+exports.extractAndPrice = runPricingLimited(async ({ imageBuffer, mimeType, clientId, stoneType, quantity, metalQuality, crop }) => {
     let workingBuffer = await cropByFractions(imageBuffer, crop);
+    imageBuffer = null;
     const extracted = validateExtracted(await extractPricingDataFromImage(workingBuffer, mimeType));
-    workingBuffer = null; // release the (possibly large) buffer promptly
+    workingBuffer = null;
 
     const resolvedMetalQuality = metalQuality || extracted.Metal?.Quality || null;
 
@@ -80,4 +87,4 @@ exports.extractAndPrice = async ({ imageBuffer, mimeType, clientId, stoneType, q
     const pricing = await calculatePricing(pricingDetails, clientId);
 
     return { extractedData: extracted, pricing };
-};
+});
