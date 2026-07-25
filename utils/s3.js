@@ -65,14 +65,4 @@ async function generatePresignedUrl(key, disposition = 'inline') {
   const url = await getSignedUrl(s3, command, { expiresIn: 3600 });
   return url;
 }
-
-async function downloadFromS3(key) {
-  assertValidS3Key(key);
-  const command = new GetObjectCommand({ Bucket: process.env.AWS_BUCKET_NAME, Key: key });
-  const response = await s3.send(command);
-  const chunks = [];
-  for await (const chunk of response.Body) chunks.push(chunk);
-  return Buffer.concat(chunks);
-}
-
-module.exports = { uploadToS3, generatePresignedUrl, downloadFromS3, sanitizeS3Key, assertValidS3Key };
+module.exports = { uploadToS3, generatePresignedUrl, sanitizeS3Key, assertValidS3Key };

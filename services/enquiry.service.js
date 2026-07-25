@@ -3,7 +3,7 @@ const userService = require("../services/user.service");
 const clientService = require("../services/client.service");
 const metalPricesService = require("../services/metalPrices.service");
 const chatService = require('./chat.service');
-const { uploadToS3, generatePresignedUrl, downloadFromS3 } = require('../utils/s3');
+const { uploadToS3, generatePresignedUrl } = require('../utils/s3');
 const { v4: uuidv4 } = require('uuid');
 const xlsx = require('xlsx');
 const codelistsService = require('../services/codelists.service');
@@ -212,15 +212,15 @@ exports.createEnquiry = async (data, files = [], userId, referenceImageDescripti
 
     // Fire-and-forget: image embedding, auto-assign designer, similar-design search.
     // Best-effort — failures are logged inside the hook and never block the response.
-    queueMicrotask(() => {
-        const { postEnquiryCreateHook } = require('./enquiryAssignment.service');
-        postEnquiryCreateHook(enquiry).catch(err =>
-            console.error('postEnquiryCreateHook failed:', err)
-        );
-    });
+    // queueMicrotask(() => {
+    //     const { postEnquiryCreateHook } = require('./enquiryAssignment.service');
+    //     postEnquiryCreateHook(enquiry).catch(err =>
+    //         console.error('postEnquiryCreateHook failed:', err)
+    //     );
+    // });
 
     queueMicrotask(() => regenerateChecklist(enquiry._id));
-    queueMicrotask(() => regenerateSummary(enquiry._id));
+    // queueMicrotask(() => regenerateSummary(enquiry._id));
 
     return enquiry._id;
 };
@@ -423,7 +423,7 @@ exports.updateEnquiry = async (id, data, userId) => {
     }
 
     queueMicrotask(() => regenerateChecklist(enquiry._id));
-    queueMicrotask(() => regenerateSummary(enquiry._id));
+    // queueMicrotask(() => regenerateSummary(enquiry._id));
 
     return { _id: enquiry._id };
 };
@@ -860,10 +860,10 @@ async function handleCoralUpload(enquiry, files, version, coralCode, userId, cos
     if (newCoralUploads.length) {
         const coralStones = tableJson?.Stones || [];
         const coralMetal = tableJson?.Metal || null;
-        queueMicrotask(() => indexUploadedAssets({
-            enquiryId: enquiry._id, type: 'coral', version: assetVersion, uploads: newCoralUploads,
-            stones: coralStones, metal: coralMetal, isOnlyMetalDesign: asset.IsOnlyMetalDesign,
-        }));
+        // queueMicrotask(() => indexUploadedAssets({
+        //     enquiryId: enquiry._id, type: 'coral', version: assetVersion, uploads: newCoralUploads,
+        //     stones: coralStones, metal: coralMetal, isOnlyMetalDesign: asset.IsOnlyMetalDesign,
+        // }));
     }
 
     return { _id: enquiry._id };
@@ -998,10 +998,10 @@ async function handleCadUpload(enquiry, files, version, cadCode, userId, cost, i
     if (newCadUploads.length) {
         const cadStones = tableJson?.Stones || [];
         const cadMetal = tableJson?.Metal || null;
-        queueMicrotask(() => indexUploadedAssets({
-            enquiryId: enquiry._id, type: 'cad', version: assetVersion, uploads: newCadUploads,
-            stones: cadStones, metal: cadMetal, isOnlyMetalDesign: asset.IsOnlyMetalDesign,
-        }));
+        // queueMicrotask(() => indexUploadedAssets({
+        //     enquiryId: enquiry._id, type: 'cad', version: assetVersion, uploads: newCadUploads,
+        //     stones: cadStones, metal: cadMetal, isOnlyMetalDesign: asset.IsOnlyMetalDesign,
+        // }));
     }
 
     return { _id: enquiry._id };
