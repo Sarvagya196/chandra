@@ -4,7 +4,7 @@ const codelistsService = require('./codelists.service');
 const notificationService = require('./notifications.service');
 const repo = require('../repositories/enquiry.repo');
 const { describeAndEmbedImage } = require('./imageDescribe.service');
-const { searchSimilarDesigns } = require('./designVectorSearch.service');
+const { findSimilar } = require('./designSimilarity.service');
 
 const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
 
@@ -48,7 +48,7 @@ async function rankDesigner({ designers, referenceTags, referenceDescription, en
     };
 
     const rankModel = genAI.getGenerativeModel({
-        model: process.env.GEMINI_RANK_MODEL || 'gemini-2.5-flash',
+        model: process.env.GEMINI_RANK_MODEL || 'gemini-3.6-flash',
         systemInstruction: `You are matching a jewellery enquiry to the best designer.
 Consider both skill match AND current workload (activeEnquiries).
 Prefer a designer with strong matching skills and a lower workload.
@@ -140,22 +140,10 @@ exports.autoAssignDesigner = async ({ enquiry, referenceDescription, referenceTa
  * Best-effort — every block try/catches.
  */
 exports.postEnquiryCreateHook = async (enquiry) => {
-    console.log(`[post-create] Running post-create hook for enquiry ${enquiry._id} with ${enquiry.ReferenceImages?.length || 0} reference images`);
+
     const refs = enquiry.ReferenceImages || [];
     const enriched = [];
 
-    for (const ref of refs) {
-        try {
-            const result = await describeAndEmbedImage({ s3Key: ref.Key, mimetype: ref.MimeType });
-            if (!result) continue;
-            enriched.push(result);
-
-        } catch (err) {
-            console.error('[post-create] describeAndEmbedImage failed for ref', ref.Key, err);
-        }
-    }
-
-    // Infer category from images if not already set
     if (enriched.length > 0 && !enquiry.Category) {
         const votes = enriched.map(e => e.category).filter(Boolean);
         if (votes.length > 0) {
@@ -171,7 +159,6 @@ exports.postEnquiryCreateHook = async (enquiry) => {
         }
     }
 
-    // Auto-assign always runs, image data enriches it when available
     try {
         const combinedDescription = enriched.map(e => e.description).join('\n\n');
         const combinedTags = [...new Set(enriched.flatMap(e => e.tags))];
@@ -206,15 +193,14 @@ exports.postEnquiryCreateHook = async (enquiry) => {
         console.error('[post-create] autoAssignDesigner failed:', err);
     }
 
-    // Find similar past designs — only possible when embeddings exist
     if (enriched.length === 0) return;
     try {
         const seen = new Map();
         for (const e of enriched) {
-            const matches = await searchSimilarDesigns({
+            const matches = await findSimilar({
                 embedding: e.embedding,
                 limit: 5,
-                excludeDesignId: enquiry._id,
+                excludeEnquiryId: enquiry._id,
             });
             for (const m of matches) {
                 const key = String(m._id);
@@ -225,7 +211,7 @@ exports.postEnquiryCreateHook = async (enquiry) => {
         const top = Array.from(seen.values())
             .sort((a, b) => b.score - a.score)
             .slice(0, 5)
-            .map(m => ({ EnquiryId: m.enquiryId, Key: m.Key, Score: m.score }));
+            .map(m => ({ EnquiryId: m.EnquiryId, Key: m.Key, Score: m.score }));
 
         if (top.length > 0) {
             await repo.updateEnquiry(enquiry._id, { SimilarDesigns: top });

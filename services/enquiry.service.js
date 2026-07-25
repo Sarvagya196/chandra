@@ -47,29 +47,26 @@ async function scopeClientFilter(queryParams, userId) {
 
 // Best-effort: describe + embed each newly-uploaded image and store in DesignEmbedding.
 // Failures are logged and swallowed — never break the upload path.
-async function indexUploadedAssets({ enquiryId, type, version, uploads }) {
-    const { describeAndEmbedImage } = require('./imageDescribe.service');
-    const designType = type === 'cad' ? 'Cad' : type;
+async function indexUploadedAssets({ enquiryId, type, version, uploads, stones, metal, isOnlyMetalDesign }) {
+    const designType = type === 'cad' ? 'cad' : type;
+    const hasStones = stones && stones.length > 0;
 
     for (const u of uploads) {
         try {
-            const [imageBuffer, result] = await Promise.all([
-                downloadFromS3(u.key),
-                describeAndEmbedImage({ s3Key: u.key, mimetype: u.mimetype }),
-            ]);
-            if (!result) continue;
-
-            const pricingData = await extractPricingDataFromImage(imageBuffer, u.mimetype);
-            if (!pricingData) continue;
-
+            if (!hasStones && !isOnlyMetalDesign) {
+                console.warn(`[indexUploadedAssets] skipping design insertion for ${type} key ${u.key}: no stones and not an only-metal design`);
+                continue;
+            }
             await insertDesign({
                 designType,
                 enquiryId,
                 s3Key: u.key,
                 mimeType: u.mimetype,
-                stones: pricingData.Stones,
-                metal: pricingData.Metal,
-                indexEmbedding: false,
+                stones: stones || [],
+                metal: metal || null,
+                indexEmbedding: true,
+                isOnlyMetalDesign: isOnlyMetalDesign || false,
+                version: version || null,
             });
         } catch (err) {
             console.error(`[indexUploadedAssets] failed for ${type} key ${u.key}:`, err);
@@ -192,11 +189,11 @@ exports.createEnquiry = async (data, files = [], userId, referenceImageDescripti
 
         // Admin notifications
         await notificationService.createAlertsForUsers(
-            adminIds, // 1. The array of user IDs
-            '🆕 New Enquiry Created', // 2. The title
-            `New enquiry "${enquiry.Name}" has been created.`, // 3. The body
-            'enquiry_created', // 4. The type
-            enquiryLink // 5. The in-app link (proper format: /enquiries/{id})
+            adminIds,
+            'New Enquiry Created',
+            `New enquiry "${enquiry.Name}" has been created.`,
+            'enquiry_created',
+            enquiryLink
         );
 
         // Designer notification (if assigned)
@@ -210,12 +207,7 @@ exports.createEnquiry = async (data, files = [], userId, referenceImageDescripti
             );
         }
 
-        console.log(
-            `📲 Sent enquiry creation notifications: ${adminIds.length} admins, ${designerId ? 1 : 0
-            } designer`
-        );
     } catch (err) {
-        console.error('❌ Error sending enquiry creation notifications:', err);
     }
 
     // Fire-and-forget: image embedding, auto-assign designer, similar-design search.
@@ -235,17 +227,13 @@ exports.createEnquiry = async (data, files = [], userId, referenceImageDescripti
 
 exports.deleteEnquiry = async (id) => {
     try {
-        // 1️⃣ Delete the enquiry
-        console.log(`Deleting enquiry ${id}...`);
         const deleted = await repo.deleteEnquiry(id);
         if (!deleted) {
             throw new Error('Enquiry not found');
         }
 
-        // 2️⃣ Delete all related messages
         await chatService.deleteChatsByEnquiryId(id);
 
-        // 3️⃣ Return the deleted enquiry
         return deleted;
     } catch (err) {
         throw new Error('Error deleting enquiry: ' + err.message);
@@ -383,30 +371,20 @@ exports.updateEnquiry = async (id, data, userId) => {
 
         // 3️⃣ 🔔 Send notifications for enquiry update
         try {
-            console.log(`[ENQUIRY UPDATE] Starting notification process for enquiry ${id}...`);
-            console.log(`[ENQUIRY UPDATE] Changes detected: ${changes.length} change(s)`);
-
-            // Get users to notify: admins and assigned user (if any)
             const adminRoleId = (await codelistsService.getCodelistByName("Roles"))
                 ?.find(role => role.Code === "AD")?.Id;
             const adminIds = await userService.getUsersByRole(adminRoleId);
             
-            // Build list of users to notify
             const usersToNotify = [...adminIds];
             
-            // Add assigned user if exists
             const assignedTo = data.AssignedTo || enquiry.StatusHistory?.at(-1)?.AssignedTo;
             if (assignedTo) {
-                // Convert to string if needed and avoid duplicates
                 const assignedToStr = assignedTo.toString();
                 if (!usersToNotify.some(id => id.toString() === assignedToStr)) {
                     usersToNotify.push(assignedTo);
                 }
             }
 
-            // Exclude the user who made the update (they don't need to be notified)
-            // EXCEPTION: If the user is assigned to the enquiry, they should still be notified
-            // (useful for testing and when assigned users update their own enquiries)
             const updatingUserIdStr = userId ? userId.toString() : '';
             const assignedToStr = assignedTo ? assignedTo.toString() : '';
             const isUpdatingUserAssigned = updatingUserIdStr === assignedToStr;
@@ -414,32 +392,22 @@ exports.updateEnquiry = async (id, data, userId) => {
             const usersToNotifyFiltered = usersToNotify.filter(
                 notifyUserId => {
                     const notifyUserIdStr = notifyUserId.toString();
-                    // Don't exclude if user is assigned to the enquiry (they should know about updates)
                     if (notifyUserIdStr === updatingUserIdStr && isUpdatingUserAssigned) {
-                        return true; // Include assigned user even if they made the update
+                        return true;
                     }
-                    return notifyUserIdStr !== updatingUserIdStr; // Otherwise exclude the updating user
+                    return notifyUserIdStr !== updatingUserIdStr;
                 }
             );
 
-            console.log(`[ENQUIRY UPDATE] Users to notify: ${usersToNotifyFiltered.length} user(s)`);
-            console.log(`[ENQUIRY UPDATE] User IDs:, usersToNotifyFiltered.map(id => id.toString())`);
-            console.log(`[ENQUIRY UPDATE] User who made update: ${updatingUserIdStr || '(none)'}`);
-            console.log(`[ENQUIRY UPDATE] Assigned user: ${assignedTo ? assignedTo.toString() : '(none)'}`);
-            console.log(`[ENQUIRY UPDATE] Admin count: ${adminIds.length}`);
-
             if (usersToNotifyFiltered.length > 0) {
-                // Build notification message based on what changed
-                let notificationTitle = '🔄 Enquiry Updated';
+                let notificationTitle = 'Enquiry Updated';
                 let notificationBody = `Enquiry "${enquiry.Name}" has been updated.`;
 
-                // If status changed, make it more specific
                 if (statusOverride) {
-                    notificationTitle = `📊 Status Changed`;
+                    notificationTitle = `Status Changed`;
                     notificationBody = `Enquiry "${enquiry.Name}" status changed to "${data.Status}".`;
                 }
 
-                // Build proper link format (mobile app format - no leading slash)
                 const enquiryLink = `enquiries/${enquiry._id.toString()}`;
 
                 await notificationService.createAlertsForUsers(
@@ -449,14 +417,8 @@ exports.updateEnquiry = async (id, data, userId) => {
                     'enquiry_updated',
                     enquiryLink
                 );
-
-                console.log(`[ENQUIRY UPDATE] ✅ Notifications sent successfully to ${usersToNotifyFiltered.length} user(s)`);
-            } else {
-                console.log(`[ENQUIRY UPDATE] ⚠ No users to notify (all users excluded or none found)`);
             }
         } catch (err) {
-            console.error(`[ENQUIRY UPDATE] ❌ Error sending notifications for enquiry ${id}:`, err);
-            // Don't fail the update if notification fails
         }
     }
 
@@ -526,15 +488,11 @@ exports.handleAssetUpload = async (id, type, files, version, code, userId, cost,
                         link
                     );
                 } else {
-                    console.log('⚠ No admins to notify after excluding uploader.');
                 }
             }
         } else {
-            console.log('⚠ Admin role id not found, skipping admin notifications.');
         }
     } catch (err) {
-        console.error(`❌ Error notifying admins after asset upload for enquiry ${id}:`, err);
-        // don't fail the main flow — upload already completed
     }
 
     // 3) return upload result to caller
@@ -883,15 +841,13 @@ async function handleCoralUpload(enquiry, files, version, coralCode, userId, cos
     // Push to the Coral array
     enquiry.Coral = enquiry.Coral || [];
 
-    // If asset already exists, update it
     const index = enquiry.Coral.findIndex(a => a.Version === assetVersion);
     if (index !== -1) {
-        enquiry.Coral[index] = asset; // Update the existing asset
+        enquiry.Coral[index] = asset;
     } else {
-        enquiry.Coral.push(asset); // If not found, push the new asset
+        enquiry.Coral.push(asset);
     }
 
-    // Add a status history entry for Coral upload (AssignedTo carried forward from the last entry).
     appendStatusEntry(enquiry, {
         status: 'Coral',
         subStatus: deriveCostSubStatus(asset),
@@ -899,13 +855,15 @@ async function handleCoralUpload(enquiry, files, version, coralCode, userId, cos
         details: `Coral Version ${asset.Version} uploaded`,
     });
 
-    await repo.updateEnquiry(enquiry._id, enquiry);
+    const updateResult = await repo.updateEnquiry(enquiry._id, enquiry);
 
-    // Fire-and-forget: index newly-uploaded coral images for similarity search. TODO later
     if (newCoralUploads.length) {
-        // queueMicrotask(() => indexUploadedAssets({
-        //     enquiryId: enquiry._id, type: 'coral', version: assetVersion, uploads: newCoralUploads,
-        // }));
+        const coralStones = tableJson?.Stones || [];
+        const coralMetal = tableJson?.Metal || null;
+        queueMicrotask(() => indexUploadedAssets({
+            enquiryId: enquiry._id, type: 'coral', version: assetVersion, uploads: newCoralUploads,
+            stones: coralStones, metal: coralMetal, isOnlyMetalDesign: asset.IsOnlyMetalDesign,
+        }));
     }
 
     return { _id: enquiry._id };
@@ -1021,15 +979,13 @@ async function handleCadUpload(enquiry, files, version, cadCode, userId, cost, i
     }
 
     // Push to the Cad array
-    // If asset already exists, update it
     const index = enquiry.Cad.findIndex(a => a.Version === assetVersion);
     if (index !== -1) {
-        enquiry.Cad[index] = asset; // Update the existing asset
+        enquiry.Cad[index] = asset;
     } else {
-        enquiry.Cad.push(asset); // If not found, push the new asset
+        enquiry.Cad.push(asset);
     }
 
-    // Add a status history entry for Cad upload (AssignedTo carried forward from the last entry).
     appendStatusEntry(enquiry, {
         status: isFinalVersion? 'Order Placement' : 'Cad',
         subStatus: isFinalVersion ? null : deriveCostSubStatus(asset),
@@ -1037,13 +993,15 @@ async function handleCadUpload(enquiry, files, version, cadCode, userId, cost, i
         details: `CAD Version ${isFinalVersion ? 'Final' : asset.Version} uploaded`,
     });
 
-    await repo.updateEnquiry(enquiry._id, enquiry);
+    const updateResult = await repo.updateEnquiry(enquiry._id, enquiry);
 
-    // Fire-and-forget: index newly-uploaded cad images for similarity search. TODO later
     if (newCadUploads.length) {
-        // queueMicrotask(() => indexUploadedAssets({
-        //     enquiryId: enquiry._id, type: 'cad', version: assetVersion, uploads: newCadUploads,
-        // }));
+        const cadStones = tableJson?.Stones || [];
+        const cadMetal = tableJson?.Metal || null;
+        queueMicrotask(() => indexUploadedAssets({
+            enquiryId: enquiry._id, type: 'cad', version: assetVersion, uploads: newCadUploads,
+            stones: cadStones, metal: cadMetal, isOnlyMetalDesign: asset.IsOnlyMetalDesign,
+        }));
     }
 
     return { _id: enquiry._id };
@@ -1052,7 +1010,6 @@ async function handleCadUpload(enquiry, files, version, cadCode, userId, cost, i
 async function handleReferenceImageUpload(enquiry, files, userId) {
 
     enquiry.ReferenceImages = enquiry.ReferenceImages || [];
-
 
     if (files.images) {
         for (const file of files.images) {
@@ -1064,10 +1021,7 @@ async function handleReferenceImageUpload(enquiry, files, userId) {
             });
         }
     }
-
-
     
-    // Reference upload doesn't transition the workflow — preserve the current Status + SubStatus.
     const lastEntry = enquiry.StatusHistory.at(-1);
     appendStatusEntry(enquiry, {
         status: lastEntry?.Status,

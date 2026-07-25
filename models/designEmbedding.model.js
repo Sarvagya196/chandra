@@ -16,7 +16,9 @@ const designEmbeddingSchema = new mongoose.Schema({
     Metal:       [MetalSchema],
     Stones:      [StoneSchema],
     Embedding:   { type: [Number], required: true },
+    TextEmbedding: { type: [Number] },
     CreatedAt:   { type: Date, default: Date.now },
+    isOnlyMetalDesign: { type: Boolean, default: false },
 });
 
 designEmbeddingSchema.index({ EnquiryId: 1 });

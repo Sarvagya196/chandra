@@ -1,6 +1,6 @@
 const { GoogleGenerativeAI, SchemaType } = require('@google/generative-ai');
 const { S3Client, GetObjectCommand } = require('@aws-sdk/client-s3');
-const { generateEmbedding } = require('../utils/embedding');
+const { generateEmbedding, generateTextEmbedding } = require('../utils/embedding');
 
 const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
 
@@ -40,7 +40,7 @@ const visionResponseSchema = {
 };
 
 const visionModel = genAI.getGenerativeModel({
-    model: process.env.GEMINI_VISION_MODEL || 'gemini-2.5-flash',
+    model: process.env.GEMINI_VISION_MODEL || 'gemini-3.6-flash',
     systemInstruction: VISION_PROMPT,
 });
 
@@ -108,5 +108,16 @@ exports.describeAndEmbedImage = async ({ s3Key, mimetype }) => {
         console.warn(`[vision] Skipped for ${s3Key} (quota likely exceeded):`, err.message);
     }
 
-    return { description, tags, embedding, group, category };
+    // Step 3: Text embedding from description (best-effort)
+    let textEmbedding = null;
+    if (description) {
+        try {
+            textEmbedding = await generateTextEmbedding(description);
+            console.log(`[embedding] Text embedding done for ${s3Key} (dims: ${textEmbedding.length})`);
+        } catch (err) {
+            console.warn(`[embedding] Text embedding failed for ${s3Key}:`, err.message);
+        }
+    }
+
+    return { description, tags, embedding, group, category, textEmbedding };
 };
