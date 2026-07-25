@@ -1,6 +1,7 @@
 const designRepo = require('../repositories/design.repo');
 
-const VECTOR_INDEX = process.env.DESIGN_EMBEDDING_INDEX || 'design_embedding_index';
+const VECTOR_INDEX = 'design_embedding_index';
+const TEXT_VECTOR_INDEX = 'design_text_embedding_index';
 
 /**
  * Insert one row into DesignEmbedding.
@@ -27,7 +28,7 @@ exports.findSimilar = async ({ embedding, limit = 5, excludeEnquiryId, filter: e
     const filter = extraFilter || { DesignType: { $in: ['coral', 'cad'] } };
     if (excludeEnquiryId) filter.EnquiryId = { $ne: excludeEnquiryId };
 
-    const pipeline = [
+    const matchPipeline = [
         {
             $vectorSearch: {
                 index: VECTOR_INDEX,
@@ -46,17 +47,113 @@ exports.findSimilar = async ({ embedding, limit = 5, excludeEnquiryId, filter: e
                 { $lookup: { from: 'enquiries', localField: 'EnquiryId', foreignField: '_id', as: 'enquiry' } },
                 { $match: { 'enquiry.0': { $exists: true } } },
               ]),
+        { $group: { _id: '$EnquiryId', score: { $max: '$score' } } },
         { $sort: { score: -1 } },
         { $limit: limit },
+    ];
+
+    const matches = await designRepo.aggregate(matchPipeline);
+    if (!matches.length) return [];
+
+    const enquiryIds = matches.map(m => m._id);
+    const scoreMap = {};
+    matches.forEach(m => { scoreMap[String(m._id)] = m.score; });
+
+    const groupPipeline = [
+        { $match: { EnquiryId: { $in: enquiryIds } } },
+        { $sort: { CreatedAt: -1 } },
+        {
+            $group: {
+                _id: '$EnquiryId',
+                docId: { $first: '$_id' },
+                Name: { $first: '$Name' },
+                Key: { $first: '$Key' },
+                versions: { $addToSet: '$Version' },
+                images: { $push: { designId: '$_id', key: '$Key', version: '$Version' } },
+            },
+        },
         {
             $project: {
-                _id: 1,
+                _id: 0,
+                enquiryId: '$_id',
+                docId: 1,
                 Name: 1,
                 Key: 1,
-                score: 1,
+                versions: 1,
+                images: 1,
             },
         },
     ];
 
-    return await designRepo.aggregate(pipeline);
+    const results = await designRepo.aggregate(groupPipeline);
+    results.forEach(r => { r.score = scoreMap[String(r.enquiryId)] || 0; });
+    results.sort((a, b) => b.score - a.score);
+    return results;
+};
+
+exports.findSimilarByText = async ({ textEmbedding, limit = 5, excludeEnquiryId, filter: extraFilter, skipEnquiryLookup = false }) => {
+    const filter = extraFilter || { DesignType: { $in: ['coral', 'cad'] }, TextEmbedding: { $exists: true, $ne: [] } };
+    if (excludeEnquiryId) filter.EnquiryId = { $ne: excludeEnquiryId };
+
+    const matchPipeline = [
+        {
+            $vectorSearch: {
+                index: TEXT_VECTOR_INDEX,
+                path: 'TextEmbedding',
+                queryVector: textEmbedding,
+                numCandidates: 1000,
+                limit: 50,
+                filter,
+            },
+        },
+        { $addFields: { score: { $meta: 'vectorSearchScore' } } },
+        { $match: { score: { $gte: 0.85 } } },
+        ...(skipEnquiryLookup
+            ? []
+            : [
+                { $lookup: { from: 'enquiries', localField: 'EnquiryId', foreignField: '_id', as: 'enquiry' } },
+                { $match: { 'enquiry.0': { $exists: true } } },
+              ]),
+        { $group: { _id: '$EnquiryId', score: { $max: '$score' } } },
+        { $sort: { score: -1 } },
+        { $limit: limit },
+    ];
+
+    const matches = await designRepo.aggregate(matchPipeline);
+    if (!matches.length) return [];
+
+    const enquiryIds = matches.map(m => m._id);
+    const scoreMap = {};
+    matches.forEach(m => { scoreMap[String(m._id)] = m.score; });
+
+    const groupPipeline = [
+        { $match: { EnquiryId: { $in: enquiryIds } } },
+        { $sort: { CreatedAt: -1 } },
+        {
+            $group: {
+                _id: '$EnquiryId',
+                docId: { $first: '$_id' },
+                Name: { $first: '$Name' },
+                Key: { $first: '$Key' },
+                versions: { $addToSet: '$Version' },
+                images: { $push: { designId: '$_id', key: '$Key', version: '$Version' } },
+            },
+        },
+        {
+            $project: {
+                _id: 0,
+                enquiryId: '$_id',
+                docId: 1,
+                Name: 1,
+                Key: 1,
+                versions: 1,
+                images: 1,
+            },
+        },
+    ];
+
+    const results = await designRepo.aggregate(groupPipeline);
+    results.forEach(r => { r.score = scoreMap[String(r.enquiryId)] || 0; });
+    results.sort((a, b) => b.score - a.score);
+    return results;
 };
