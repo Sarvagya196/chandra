@@ -6,6 +6,8 @@ const ChatSchema = new mongoose.Schema({
     required: true 
   },
   EnquiryName: { type: String, required: true }, // cached for quick display
+  AssignedTo: { type: mongoose.Schema.Types.ObjectId, ref: 'User', default: null },
+  AssignedToName: { type: String, default: null },
 
   Type: { 
     type: String, 
