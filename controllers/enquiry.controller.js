@@ -193,6 +193,22 @@ exports.searchEnquiries = async (req, res) => {
     }
 };
 
+exports.resortEnquiries = async (req, res) => {
+    try {
+        const result = await service.resortEnquiries(req.body);
+        res.json(result);
+    } catch (error) {
+        console.error("Error resorting enquiries:", error);
+        if (error.message === 'draggedId is required') {
+            return res.status(400).json({ message: "draggedId is required" });
+        }
+        if (error.message === 'Enquiry not found') {
+            return res.status(404).json({ message: "Enquiry not found" });
+        }
+        res.status(500).json({ message: "Internal server error" });
+    }
+};
+
 exports.massActionEnquiries = async (req, res) => {
     try {
         const { enquiryIds, updateType, newStatus } = req.body;
