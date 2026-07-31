@@ -5,7 +5,7 @@ const { extractPricingDataFromImage } = require('./imagePricing.service');
 const { findSimilar, findSimilarByText } = require('./designSimilarity.service');
 const designRepo = require('../repositories/design.repo');
 
-exports.insertDesign = async ({ designType, images, name, uploadedBy, mimeType, stones, metal, s3Key, enquiryId, indexEmbedding = true, isOnlyMetalDesign = false  , version = null }) => {
+exports.insertDesign = async ({ designType, images, name, uploadedBy, mimeType, stones, metal, s3Key, enquiryId, indexEmbedding = true, isOnlyMetalDesign = false, version = null }) => {
     designType = designType?.toLowerCase();
     if (!s3Key) {
         const fileObj = { buffer: images, mimetype: mimeType, originalname: name || 'design' };
@@ -55,7 +55,7 @@ exports.lookup = async ({ buffer, mimeType, search, designType, category, skip, 
     if (buffer) {
         const embedding = await generateEmbedding(buffer, mimeType);
         try {
-            return await vectorSearchDesigns({ embedding, designType, category, skip, limit });
+            return await vectorSearchDesigns({ embedding, embeddingType: 'image', designType, category, skip, limit });
         } catch (err) {
             console.warn('[lookup] vector search failed, falling back to filter:', err.message);
             return await filterDesigns({ designType, category, skip, limit });
@@ -71,7 +71,7 @@ exports.lookup = async ({ buffer, mimeType, search, designType, category, skip, 
         }
         let vectorResults;
         try {
-            vectorResults = await textVectorSearchDesigns({ textEmbedding, designType, category, skip, limit });
+            vectorResults = await vectorSearchDesigns({ embedding: textEmbedding, embeddingType: 'text', designType, category, skip, limit });
         } catch (err) {
             console.warn('[lookup] text vector search failed, falling back to regex:', err.message);
             return await filterDesigns({ search, designType, category, skip, limit });
@@ -93,13 +93,25 @@ exports.lookup = async ({ buffer, mimeType, search, designType, category, skip, 
     return await filterDesigns({ skip, limit });
 };
 
-async function vectorSearchDesigns({ embedding, designType, category, skip = 0, limit = 10 }) {
+async function resolvePresignedUrls(item) {
+    const url = item.Key ? await generatePresignedUrl(item.Key) : null;
+    const variantImages = await Promise.all((item.images || []).map(async (img) => ({
+        ...img,
+        url: img.key ? await generatePresignedUrl(img.key) : null,
+    })));
+    return { url, variantImages };
+}
+
+async function vectorSearchDesigns({ embedding, embeddingType = 'image', designType, category, skip = 0, limit = 10 }) {
     const filter = {};
     if (designType) filter.DesignType = designType.toLowerCase();
     if (category) filter.Category = category;
 
-    const results = await findSimilar({
-        embedding,
+    const searchFn = embeddingType === 'text' ? findSimilarByText : findSimilar;
+    const searchParam = embeddingType === 'text' ? 'textEmbedding' : 'embedding';
+
+    const results = await searchFn({
+        [searchParam]: embedding,
         limit: skip + limit,
         filter: Object.keys(filter).length > 0 ? filter : undefined,
         skipEnquiryLookup: true,
@@ -108,11 +120,7 @@ async function vectorSearchDesigns({ embedding, designType, category, skip = 0, 
     const pagedResults = results.slice(skip, skip + limit);
 
     const images = await Promise.all(pagedResults.map(async (r) => {
-        const url = r.Key ? await generatePresignedUrl(r.Key) : null;
-        const variantImages = await Promise.all((r.images || []).map(async (img) => ({
-            ...img,
-            url: img.key ? await generatePresignedUrl(img.key) : null,
-        })));
+        const { url, variantImages } = await resolvePresignedUrls(r);
         return {
             Url: url,
             Name: r.Name || '',
@@ -127,41 +135,7 @@ async function vectorSearchDesigns({ embedding, designType, category, skip = 0, 
     return { images, total: images.length, skip, limit };
 }
 
-async function textVectorSearchDesigns({ textEmbedding, designType, category, skip = 0, limit = 10 }) {
-    const filter = {};
-    if (designType) filter.DesignType = designType.toLowerCase();
-    if (category) filter.Category = category;
-
-    const results = await findSimilarByText({
-        textEmbedding,
-        limit: skip + limit,
-        filter: Object.keys(filter).length > 0 ? filter : undefined,
-        skipEnquiryLookup: true,
-    });
-
-    const pagedResults = results.slice(skip, skip + limit);
-
-    const images = await Promise.all(pagedResults.map(async (r) => {
-        const url = r.Key ? await generatePresignedUrl(r.Key) : null;
-        const variantImages = await Promise.all((r.images || []).map(async (img) => ({
-            ...img,
-            url: img.key ? await generatePresignedUrl(img.key) : null,
-        })));
-        return {
-            Url: url,
-            Name: r.Name || '',
-            enquiryId: r.enquiryId,
-            designId: r.docId,
-            score: r.score,
-            versions: (r.versions || []).filter(Boolean),
-            images: variantImages,
-        };
-    }));
-
-    return { images, total: images.length, skip, limit };
-}
-
-async function filterDesigns({search, designType, category, skip = 0, limit = 10 }) {
+async function filterDesigns({ search, designType, category, skip = 0, limit = 10 }) {
     const match = {};
     if (search) match.$or = [
         { Description: { $regex: search, $options: 'i' } },
@@ -184,29 +158,29 @@ async function filterDesigns({search, designType, category, skip = 0, limit = 10
         },
     };
 
-    const [results, countResult] = await Promise.all([
-        designRepo.aggregate([
-            { $match: match },
-            { $sort: { CreatedAt: -1 } },
-            groupStage,
-            { $skip: skip },
-            { $limit: limit },
-        ]),
-        designRepo.aggregate([
-            { $match: match },
-            { $group: { _id: '$EnquiryId' } },
-            { $count: 'total' },
-        ]),
+    const [facetResult] = await designRepo.aggregate([
+        { $match: match },
+        {
+            $facet: {
+                results: [
+                    { $sort: { CreatedAt: -1 } },
+                    groupStage,
+                    { $skip: skip },
+                    { $limit: limit },
+                ],
+                totalCount: [
+                    { $group: { _id: '$EnquiryId' } },
+                    { $count: 'total' },
+                ],
+            },
+        },
     ]);
 
-    const total = countResult[0]?.total || 0;
+    const results = facetResult.results || [];
+    const total = facetResult.totalCount[0]?.total || 0;
 
     const images = await Promise.all(results.map(async (d) => {
-        const url = d.Key ? await generatePresignedUrl(d.Key) : null;
-        const variantImages = await Promise.all((d.images || []).map(async (img) => ({
-            ...img,
-            url: img.key ? await generatePresignedUrl(img.key) : null,
-        })));
+        const { url, variantImages } = await resolvePresignedUrls(d);
         return {
             enquiryId: d._id,
             Name: d.Name || '',
