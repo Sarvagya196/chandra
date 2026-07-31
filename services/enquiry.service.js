@@ -161,6 +161,9 @@ exports.createEnquiry = async (data, files = [], userId, referenceImageDescripti
         });
     }
 
+    const maxOrderKey = await repo.getMaxOrderKey();
+    rest.OrderKey = (maxOrderKey ?? 0) + 1000;
+
     const enquiryData = {
         ...rest,
         StatusHistory
@@ -222,6 +225,53 @@ exports.createEnquiry = async (data, files = [], userId, referenceImageDescripti
     queueMicrotask(() => regenerateSummary(enquiry._id));
 
     return enquiry._id;
+};
+
+async function finishResort(draggedId, prev, next) {
+    let newKey;
+    if (prev && next) {
+        newKey = (prev.OrderKey + next.OrderKey) / 2;
+    } else if (prev) {
+        newKey = prev.OrderKey + 1000;
+    } else if (next) {
+        newKey = next.OrderKey / 2;
+    } else {
+        newKey = 1000;
+    }
+    await repo.setOrderKey(draggedId, newKey);
+    return { _id: draggedId, OrderKey: newKey };
+}
+
+exports.resortEnquiries = async ({ draggedId, previousId, nextId }) => {
+    if (!draggedId) throw new Error('draggedId is required');
+
+    const [dragged] = await repo.getOrderKeysByIds([draggedId]);
+    if (!dragged) throw new Error('Enquiry not found');
+
+    const ids = [previousId, nextId].filter(Boolean);
+    const rows = ids.length ? await repo.getOrderKeysByIds(ids) : [];
+    const byId = new Map(rows.map(row => [String(row._id), row]));
+
+    const prev = previousId ? byId.get(String(previousId)) || null : null;
+    const next = nextId ? byId.get(String(nextId)) || null : null;
+
+    const prevNeedsKey = prev && prev.OrderKey == null;
+    const nextNeedsKey = next && next.OrderKey == null;
+    const gapTooSmall = prev && next && (next.OrderKey - prev.OrderKey) < 2;
+    const topDegenerate = next && (next.OrderKey / 2) <= 0;
+
+    if (prevNeedsKey || nextNeedsKey || gapTooSmall || topDegenerate) {
+        await repo.rebalanceOrderKeys();
+        const fresh = await repo.getOrderKeysByIds(ids);
+        const freshById = new Map(fresh.map(row => [String(row._id), row]));
+        return finishResort(
+            draggedId,
+            previousId ? freshById.get(String(previousId)) || null : null,
+            nextId ? freshById.get(String(nextId)) || null : null
+        );
+    }
+
+    return finishResort(draggedId, prev, next);
 };
 
 exports.deleteEnquiry = async (id) => {
@@ -1299,7 +1349,9 @@ async function searchEnquiriesInternal(queryParams, options = {}) {
     // --- 2. Prepare Sorting ---
     const sortBy = queryParams.sortBy || 'AssignedDate'; // Default sort
     const sortOrder = queryParams.sortOrder === 'asc' ? 1 : -1;
-    const sort = { [sortBy]: sortOrder };
+    const sort = sortBy === 'priority'
+        ? { priority: sortOrder, orderKey: 1 }
+        : { [sortBy]: sortOrder };
 
     // --- 3. Extract Search Term ---
     // This is the value from your main search bar

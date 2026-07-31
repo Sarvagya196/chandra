@@ -74,6 +74,7 @@ const enquirySchema = new mongoose.Schema({
         AddedBy: String
     }],
     Priority: String,
+    OrderKey: { type: Number, default: null },
     Metal: {
         Color: String,
         Quality: String
@@ -173,5 +174,6 @@ enquirySchema.index({ "Coral.CoralCode": 1 });
 enquirySchema.index({ Name: 1 });
 enquirySchema.index({ StyleNumber: 1 });
 enquirySchema.index({ GatiOrderNumber: 1 });
+enquirySchema.index({ OrderKey: 1 });
 
 module.exports = mongoose.model('Enquiry', enquirySchema);

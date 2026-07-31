@@ -96,6 +96,57 @@ exports.updatePriority = async (id, priority) => {
   );
 };
 
+exports.getMaxOrderKey = async () => {
+  const enquiry = await Enquiry.findOne({ OrderKey: { $ne: null } })
+    .sort({ OrderKey: -1 })
+    .select({ OrderKey: 1 })
+    .lean();
+  return enquiry?.OrderKey ?? null;
+};
+
+exports.getOrderKeysByIds = async (ids) => {
+  return await Enquiry.find({ _id: { $in: ids } }, { OrderKey: 1, Priority: 1, ClientId: 1 }).lean();
+};
+
+exports.setOrderKey = async (id, orderKey) => {
+  return await Enquiry.findByIdAndUpdate(
+    id,
+    { $set: { OrderKey: orderKey } },
+    { new: true }
+  );
+};
+
+exports.rebalanceOrderKeys = async () => {
+  const enquiries = await Enquiry.aggregate([
+    {
+      $addFields: {
+        PriorityOrder: {
+          $switch: {
+            branches: [
+              { case: { $eq: ["$Priority", "Super High"] }, then: 2 },
+              { case: { $eq: ["$Priority", "High"] }, then: 1 }
+            ],
+            default: 0
+          }
+        }
+      }
+    },
+    { $sort: { PriorityOrder: -1, OrderKey: 1 } },
+    { $project: { _id: 1 } }
+  ]);
+
+  const updates = enquiries.map((enquiry, index) => ({
+    updateOne: {
+      filter: { _id: enquiry._id },
+      update: { $set: { OrderKey: (index + 1) * 1000 } }
+    }
+  }));
+
+  if (updates.length) {
+    await Enquiry.bulkWrite(updates);
+  }
+};
+
 exports.updateEscalation = async (id, escalation) => {
   return await Enquiry.findByIdAndUpdate(
     id,
@@ -268,6 +319,10 @@ exports.search = async (searchTerm, filters, sort, pagination) => {
       // 3. Add the new number-based sort key
       pipelineSort.PriorityOrder = sortDirection;
     }
+    if (pipelineSort.orderKey !== undefined) {
+      pipelineSort.OrderKey = pipelineSort.orderKey;
+      delete pipelineSort.orderKey;
+    }
       
     // --- 3. Define the Aggregation Pipeline ---
     const pipeline = [
@@ -370,6 +425,7 @@ exports.search = async (searchTerm, filters, sort, pagination) => {
                             Name: 1,
                             StyleNumber: 1,
                             Category: 1,
+                            OrderKey: 1,
                             CurrentStatus: 1,
                             CurrentSubStatus: 1,
                             ClientId: 1,

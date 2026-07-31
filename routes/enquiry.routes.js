@@ -52,6 +52,13 @@ router.post(
     controller.massActionEnquiries
 );
 
+// Resort (fractional indexing)
+router.post(
+    '/resort',
+    authenticateToken,
+    controller.resortEnquiries
+);
+
 
 //Update asset details, marking as approved, 
 router.put('/:id/upload/:type',
