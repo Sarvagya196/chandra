@@ -52,11 +52,11 @@ router.post(
     controller.massActionEnquiries
 );
 
-// Resort (fractional indexing)
+// ReSort (fractional indexing)
 router.post(
-    '/resort',
+    '/reSort',
     authenticateToken,
-    controller.resortEnquiries
+    controller.reSortEnquiries
 );
 
 

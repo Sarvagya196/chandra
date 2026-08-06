@@ -7,9 +7,9 @@ const client = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
 // ─── Required fields per media type ─────────────────────────────────────────
 // These are the fields that MUST be populated; anything missing becomes a missingField entry.
 const REQUIRED_BY_STATUS = {
-    coral:        ['Name', 'ClientId', 'Category', 'Priority', 'Metal.Color', 'Metal.Quality', 'StoneType', 'Remarks'],
-    cad:          ['Name', 'ClientId', 'Category', 'Priority', 'Metal.Color', 'Metal.Quality', 'StoneType', 'Remarks'],
-    approved_cad: ['Name', 'ClientId', 'Category', 'Priority', 'Metal.Color', 'Metal.Quality', 'StoneType', 'Remarks'],
+    coral:        ['Name', 'ClientId', 'Category', 'Priority', 'Metal.Color', 'Metal.Quality', 'StoneTypes', 'Remarks'],
+    cad:          ['Name', 'ClientId', 'Category', 'Priority', 'Metal.Color', 'Metal.Quality', 'StoneTypes', 'Remarks'],
+    approved_cad: ['Name', 'ClientId', 'Category', 'Priority', 'Metal.Color', 'Metal.Quality', 'StoneTypes', 'Remarks'],
 };
 
 // ─── Static option lists ─────────────────────────────────────────────────────
@@ -26,7 +26,7 @@ const FIELD_LABELS = {
     'Priority':     'Priority',
     'Metal.Color':  'Metal Colour',
     'Metal.Quality':'Metal Quality',
-    'StoneType':    'Stone Type',
+    'StoneTypes':   'Stone Types',
     'Remarks':      'Remarks',
 };
 
@@ -89,7 +89,7 @@ Available clients (match by name from the message, return the "id" value as Clie
 Each client has a priority_order (lower number = more important client), used as the Priority baseline (see the Priority rule below):
 ${clientJson}
 
-Available stone types (match by name from the message, return the "name" value as StoneType):
+Available stone types (match by name from the message, return an array of matching "name" values as StoneTypes):
 ${stoneTypeJson}
 
 Return ONLY a valid JSON object with these keys (use null for anything not mentioned):
@@ -108,7 +108,7 @@ Return ONLY a valid JSON object with these keys (use null for anything not menti
     "Color": "<Yellow Gold|White Gold|Rose Gold|Two Tone Rose White Gold|Two Tone Yellow White Gold| or null>",
     "Quality": "<10K|14K|18K|22K|Silver 925|Platinum or null>"
   },
-  "StoneType": "<stone type from message or null>",
+  "StoneTypes": ["<stone types from message (array of names from the list above), empty array [] if none>"],
   "Stamping": "<string or null>",
   "Remarks": "<copy the exact original message here>",
   "SpecialRemarks": "<any special instructions or additional notes beyond the main request or null>",
@@ -140,7 +140,7 @@ exports.parseEnquiryMessage = async ({ message, mediaType }) => {
         'Priority':      PRIORITY_OPTIONS.map(o => ({ label: o, value: o })),
         'Metal.Color':   METAL_COLOR_OPTIONS.map(o => ({ label: o, value: o })),
         'Metal.Quality': METAL_QUALITY_OPTIONS.map(o => ({ label: o, value: o })),
-        'StoneType':     stoneTypeOptions,
+        'StoneTypes':    stoneTypeOptions,
         'Name':          [],
         'Remarks':       [],
     };
@@ -165,6 +165,15 @@ exports.parseEnquiryMessage = async ({ message, mediaType }) => {
     if (isMissing(parsed.Remarks)) {
         parsed.Remarks = message;
     }
+
+    // Normalize StoneTypes to a non-empty array; the LLM may return a single string, null or [].
+    if (typeof parsed.StoneTypes === 'string') {
+        parsed.StoneTypes = parsed.StoneTypes.trim() ? [parsed.StoneTypes.trim()] : [];
+    }
+    if (!Array.isArray(parsed.StoneTypes)) {
+        parsed.StoneTypes = [];
+    }
+    parsed.StoneTypes = [...new Set(parsed.StoneTypes.map(s => String(s).trim()).filter(Boolean))];
 
     // Enforce the client-tier priority floor deterministically (only ever escalates).
     const matchedClient = clients.find(c => String(c._id) === String(parsed.ClientId));

@@ -15,14 +15,24 @@ const { extractPricingDataFromImage } = require('./imagePricing.service');
 const { normalizeShape } = require('../utils/shapes');
 const { deriveSubStatus, isValidPair, appendStatusEntry } = require('../utils/enquiryStatus');
 
-// 'Quotation Review' only when pricing is complete; else 'Cost Missing'.
+const ORDER_KEY_GAP = 1000;
+const MIN_ORDER_KEY_GAP = 2;
+
+const PRIORITY_RANK = { 'Super High': 2, 'High': 1 };
+
+// 'Quotation Review' only when ALL stone-type pricings are complete; else 'Cost Missing'.
 function deriveCostSubStatus(asset) {
-    const p = Array.isArray(asset?.Pricing) ? asset.Pricing[0] : null;
-    if (!p) return 'Cost Missing';
-    const stones = p.Stones || [];
-    const stonesPriced = asset.IsOnlyMetalDesign ? true : (stones.length > 0 && stones.every(s => Number(s.Price) > 0));
-    const metalPriced = Number(p.MetalPrice) > 0;
-    return (stonesPriced && metalPriced) ? 'Quotation Review' : 'Cost Missing';
+    const pricing = Array.isArray(asset?.Pricing) ? asset.Pricing : [];
+    if (pricing.length === 0) return 'Cost Missing';
+
+    const allPriced = pricing.every(p => {
+        const stones = p.Stones || [];
+        const stonesPriced = asset.IsOnlyMetalDesign ? true : (stones.length > 0 && stones.every(s => Number(s.Price) > 0));
+        const metalPriced = Number(p.MetalPrice) > 0;
+        return stonesPriced && metalPriced;
+    });
+
+    return allPriced ? 'Quotation Review' : 'Cost Missing';
 }
 
 async function scopeClientFilter(queryParams, userId) {
@@ -161,8 +171,11 @@ exports.createEnquiry = async (data, files = [], userId, referenceImageDescripti
         });
     }
 
-    const maxOrderKey = await repo.getMaxOrderKey();
-    rest.OrderKey = (maxOrderKey ?? 0) + 1000;
+    const hasUninitialized = await repo.hasUninitializedOrderKeys();
+    if (!hasUninitialized) {
+        const maxOrderKey = await repo.getMaxOrderKey();
+        rest.OrderKey = (maxOrderKey ?? 0) + ORDER_KEY_GAP;
+    }
 
     const enquiryData = {
         ...rest,
@@ -227,23 +240,78 @@ exports.createEnquiry = async (data, files = [], userId, referenceImageDescripti
     return enquiry._id;
 };
 
-async function finishResort(draggedId, prev, next) {
+async function applyReSort(draggedId, prev, next) {
     let newKey;
     if (prev && next) {
         newKey = (prev.OrderKey + next.OrderKey) / 2;
     } else if (prev) {
-        newKey = prev.OrderKey + 1000;
+        newKey = prev.OrderKey + ORDER_KEY_GAP;
     } else if (next) {
         newKey = next.OrderKey / 2;
     } else {
-        newKey = 1000;
+        newKey = ORDER_KEY_GAP;
     }
     await repo.setOrderKey(draggedId, newKey);
     return { _id: draggedId, OrderKey: newKey };
 }
 
-exports.resortEnquiries = async ({ draggedId, previousId, nextId }) => {
-    if (!draggedId) throw new Error('draggedId is required');
+function sortByPriority(docs) {
+    return [...docs].sort((a, b) => {
+        const rankA = PRIORITY_RANK[a.Priority] ?? 0;
+        const rankB = PRIORITY_RANK[b.Priority] ?? 0;
+        if (rankA !== rankB) return rankB - rankA;
+        return String(a._id).localeCompare(String(b._id));
+    });
+}
+
+async function rebalanceByPriority() {
+    const allDocs = await repo.getAllEnquiryOrderKeys();
+    const sorted = sortByPriority(allDocs);
+    const sortedIds = sorted.map(d => d._id);
+    await repo.rebalanceOrderKeys(sortedIds);
+}
+
+async function assignNullKeys() {
+    const orphans = await repo.getNullKeyedDocs();
+    if (!orphans.length) return;
+
+    const keyed = await repo.getKeyedDocs();
+    const sortedOrphans = sortByPriority(orphans);
+
+    const updates = [];
+    for (const orphan of sortedOrphans) {
+        let insertIdx = keyed.length;
+        for (let i = 0; i < keyed.length; i++) {
+            const rankOrphan = PRIORITY_RANK[orphan.Priority] ?? 0;
+            const rankKeyed = PRIORITY_RANK[keyed[i].Priority] ?? 0;
+            if (rankOrphan > rankKeyed) { insertIdx = i; break; }
+            if (rankOrphan === rankKeyed && String(orphan._id) < String(keyed[i]._id)) { insertIdx = i; break; }
+        }
+        const prev = insertIdx > 0 ? keyed[insertIdx - 1] : null;
+        const next = insertIdx < keyed.length ? keyed[insertIdx] : null;
+
+        let newKey;
+        if (prev && next) {
+            newKey = (prev.OrderKey + next.OrderKey) / 2;
+        } else if (prev) {
+            newKey = prev.OrderKey + ORDER_KEY_GAP;
+        } else if (next) {
+            newKey = next.OrderKey / 2;
+        } else {
+            newKey = ORDER_KEY_GAP;
+        }
+        updates.push({ id: orphan._id, key: newKey });
+        keyed.splice(insertIdx, 0, { _id: orphan._id, Priority: orphan.Priority, OrderKey: newKey });
+    }
+
+    await repo.bulkSetOrderKeys(updates);
+}
+
+exports.reSortEnquiries = async ({ draggedId, previousId, nextId }) => {
+    if (!draggedId) throw Object.assign(new Error('draggedId is required'), { status: 400 });
+    if (draggedId === previousId) throw Object.assign(new Error('draggedId cannot equal previousId'), { status: 400 });
+    if (draggedId === nextId) throw Object.assign(new Error('draggedId cannot equal nextId'), { status: 400 });
+    if (previousId && nextId && previousId === nextId) throw Object.assign(new Error('previousId and nextId must differ'), { status: 400 });
 
     const [dragged] = await repo.getOrderKeysByIds([draggedId]);
     if (!dragged) throw new Error('Enquiry not found');
@@ -255,23 +323,25 @@ exports.resortEnquiries = async ({ draggedId, previousId, nextId }) => {
     const prev = previousId ? byId.get(String(previousId)) || null : null;
     const next = nextId ? byId.get(String(nextId)) || null : null;
 
+    if (prev && next && prev.OrderKey >= next.OrderKey) {
+        throw Object.assign(new Error('Invalid sort position: previous must come before next'), { status: 400 });
+    }
+
     const prevNeedsKey = prev && prev.OrderKey == null;
     const nextNeedsKey = next && next.OrderKey == null;
-    const gapTooSmall = prev && next && (next.OrderKey - prev.OrderKey) < 2;
-    const topDegenerate = next && (next.OrderKey / 2) <= 0;
 
-    if (prevNeedsKey || nextNeedsKey || gapTooSmall || topDegenerate) {
-        await repo.rebalanceOrderKeys();
+    if (prevNeedsKey || nextNeedsKey) {
+        await assignNullKeys();
         const fresh = await repo.getOrderKeysByIds(ids);
         const freshById = new Map(fresh.map(row => [String(row._id), row]));
-        return finishResort(
+        return applyReSort(
             draggedId,
             previousId ? freshById.get(String(previousId)) || null : null,
             nextId ? freshById.get(String(nextId)) || null : null
         );
     }
 
-    return finishResort(draggedId, prev, next);
+    return applyReSort(draggedId, prev, next);
 };
 
 exports.deleteEnquiry = async (id) => {
@@ -301,7 +371,7 @@ exports.updateEnquiry = async (id, data, userId) => {
 
     const updatableFields = [
         'Name', 'Quantity', 'StyleNumber', 'ClientId',
-        'Priority', 'Metal', 'Category', 'StoneType',
+        'Priority', 'Metal', 'Category', /* 'StoneType', */ 'StoneTypes',
         'MetalWeight', 'DiamondWeight', 'Stamping',
         'Remarks', 'ShippingDate', 'Budget', 'SpecialRemarks',
         'ApprovedDate', 'GatiOrderNumber', 'Checklist'
@@ -421,6 +491,7 @@ exports.updateEnquiry = async (id, data, userId) => {
 
         Object.assign(enquiry, updatedFields);
         await repo.updateEnquiry(id, enquiry);
+
 
         // 3️⃣ 🔔 Send notifications for enquiry update
         try {
@@ -811,6 +882,38 @@ exports.updateAssetData = async (enquiryId, type, version, data, userId) => {
 };
 
 
+// Extract the design geometry once, then price it once per enquiry stone type. The same
+// extracted stones are re-priced for each type so Coral/Cad.Pricing holds one entry per type.
+async function priceUploadedStones(tableJson, enquiry, clientId, isOnlyMetalDesign) {
+    // Old single-type fallback (deprecated):
+    // const types = enquiry.StoneType ? [enquiry.StoneType] : [];
+    const types = (Array.isArray(enquiry.StoneTypes) && enquiry.StoneTypes.length)
+        ? [...new Set(enquiry.StoneTypes.filter(Boolean))]
+        : [];
+
+    if (!types.length) return null;
+
+    tableJson.Metal = {
+        Weight: tableJson.Metal.Weight || 0,
+        Quality: enquiry.Metal.Quality || tableJson.Metal.Quality || null,
+    };
+    tableJson.Quantity = enquiry.Quantity || 1;
+
+    if (isOnlyMetalDesign) {
+        return [await exports.calculatePricing({ ...tableJson, Stones: [] }, clientId)];
+    }
+
+    const pricing = [];
+    for (const type of types) {
+        pricing.push(await exports.calculatePricing({
+            ...tableJson,
+            Stones: tableJson.Stones.map(stone => ({ ...stone, Type: type, Markup: 0 })),
+        }, clientId));
+    }
+    return pricing;
+}
+
+
 async function handleCoralUpload(enquiry, files, version, coralCode, userId, cost, isOnlyMetalDesign = false) {
 
     const assetVersion = version || 'Version 1';
@@ -867,58 +970,45 @@ async function handleCoralUpload(enquiry, files, version, coralCode, userId, cos
     }
 
     if (tableJson) {
-        tableJson.Stones = tableJson.Stones.map(stone => ({
-            ...stone,
-            Type: enquiry.StoneType,
-            Markup: 0
-        }));
-        tableJson.Metal = {
-            Weight: tableJson.Metal.Weight || 0,
-            Quality: enquiry.Metal.Quality || tableJson.Metal.Quality || null,
-        };
-        tableJson.Quantity = enquiry.Quantity || 1;
+        const priced = await priceUploadedStones(tableJson, enquiry, enquiry.ClientId, asset.IsOnlyMetalDesign);
 
-        if (asset.IsOnlyMetalDesign) {
-            tableJson.Stones = [];
+        if (Array.isArray(priced) && priced.length) {
+            asset.Pricing = priced.map(pricing => ({
+                MetalPrice: +pricing.MetalPrice,
+                DiamondsPrice: +pricing.DiamondsPrice,
+                TotalPrice: +pricing.TotalPrice,
+                DutiesAmount: +pricing.DutiesAmount,
+                DiamondWeight: pricing.DiamondWeight,
+                TotalPieces: tableJson.TotalPieces,
+                Loss: pricing.Client.Loss,
+                Labour: pricing.Client.Labour,
+                ExtraCharges: pricing.Client.ExtraCharges,
+                UndercutPrice: pricing.Client.UndercutPrice,
+                NaturalDuties: pricing.Client.NaturalDuties,
+                LabDuties: pricing.Client.LabDuties,
+                GoldDuties: pricing.Client.GoldDuties,
+                SilverAndLabsDuties: pricing.Client.SilverAndLabsDuties,
+                LossAndLabourDuties: pricing.Client.LossAndLabourDuties,
+                ClientPricingMessage: pricing.ClientPricingMessage || null,
+                Metal: {
+                    Weight: pricing.Metal.Weight,
+                    Quality: pricing.Metal.Quality,
+                    Rate: pricing.Metal.Rate
+                },
+                Stones: (pricing.Stones || []).map(stone => ({
+                    Type: stone.Type,
+                    Color: stone.Color,
+                    Shape: stone.Shape,
+                    MmSize: stone.MmSize,
+                    SieveSize: stone.SieveSize,
+                    Weight: stone.Weight,
+                    Pcs: stone.Pcs,
+                    CtWeight: stone.CtWeight,
+                    Price: stone.Price,
+                    Markup: stone.Markup || 0
+                }))
+            }));
         }
-
-        let pricing = await exports.calculatePricing(tableJson, enquiry.ClientId);
-
-        asset.Pricing = [{
-            MetalPrice: +pricing.MetalPrice,
-            DiamondsPrice: +pricing.DiamondsPrice,
-            TotalPrice: +pricing.TotalPrice,
-            DutiesAmount: +pricing.DutiesAmount,
-            DiamondWeight: pricing.DiamondWeight,
-            TotalPieces: tableJson.TotalPieces,
-            Loss: pricing.Client.Loss,
-            Labour: pricing.Client.Labour,
-            ExtraCharges: pricing.Client.ExtraCharges,
-            UndercutPrice: pricing.Client.UndercutPrice,
-            NaturalDuties: pricing.Client.NaturalDuties,
-            LabDuties: pricing.Client.LabDuties,
-            GoldDuties: pricing.Client.GoldDuties,
-            SilverAndLabsDuties: pricing.Client.SilverAndLabsDuties,
-            LossAndLabourDuties: pricing.Client.LossAndLabourDuties,
-            ClientPricingMessage: pricing.ClientPricingMessage || null,
-            Metal: {
-                Weight: pricing.Metal.Weight,
-                Quality: pricing.Metal.Quality,
-                Rate: pricing.Metal.Rate
-            },
-            Stones: (pricing.Stones || []).map(stone => ({
-                Type: stone.Type,
-                Color: stone.Color,
-                Shape: stone.Shape,
-                MmSize: stone.MmSize,
-                SieveSize: stone.SieveSize,
-                Weight: stone.Weight,
-                Pcs: stone.Pcs,
-                CtWeight: stone.CtWeight,
-                Price: stone.Price,
-                Markup: stone.Markup || 0
-            }))
-        }];
     }
 
     // Push to the Coral array
@@ -1007,58 +1097,45 @@ async function handleCadUpload(enquiry, files, version, cadCode, userId, cost, i
     }
 
     if (tableJson) {
-        tableJson.Stones = tableJson.Stones.map(stone => ({
-            ...stone,
-            Type: enquiry.StoneType,
-            Markup: 0
-        }));
-        tableJson.Metal = {
-            Weight: tableJson.Metal.Weight || null,
-            Quality: enquiry.Metal.Quality || tableJson.Metal.Quality || null,
-        };
-        tableJson.Quantity = enquiry.Quantity || 1;
+        const priced = await priceUploadedStones(tableJson, enquiry, enquiry.ClientId, asset.IsOnlyMetalDesign);
 
-        if (asset.IsOnlyMetalDesign) {
-            tableJson.Stones = [];
+        if (Array.isArray(priced) && priced.length) {
+            asset.Pricing = priced.map(pricing => ({
+                MetalPrice: +pricing.MetalPrice,
+                DiamondsPrice: +pricing.DiamondsPrice,
+                TotalPrice: +pricing.TotalPrice,
+                DutiesAmount: +pricing.DutiesAmount,
+                DiamondWeight: pricing.DiamondWeight,
+                TotalPieces: tableJson.TotalPieces,
+                Loss: pricing.Client.Loss,
+                Labour: pricing.Client.Labour,
+                ExtraCharges: pricing.Client.ExtraCharges,
+                UndercutPrice: pricing.Client.UndercutPrice,
+                NaturalDuties: pricing.Client.NaturalDuties,
+                LabDuties: pricing.Client.LabDuties,
+                GoldDuties: pricing.Client.GoldDuties,
+                SilverAndLabsDuties: pricing.Client.SilverAndLabsDuties,
+                LossAndLabourDuties: pricing.Client.LossAndLabourDuties,
+                ClientPricingMessage: pricing.ClientPricingMessage || null,
+                Metal: {
+                    Weight: pricing.Metal.Weight,
+                    Quality: pricing.Metal.Quality,
+                    Rate: pricing.Metal.Rate
+                },
+                Stones: (pricing.Stones || []).map(stone => ({
+                    Type: stone.Type,
+                    Color: stone.Color,
+                    Shape: stone.Shape,
+                    MmSize: stone.MmSize,
+                    SieveSize: stone.SieveSize,
+                    Weight: stone.Weight,
+                    Pcs: stone.Pcs,
+                    CtWeight: stone.CtWeight,
+                    Price: stone.Price,
+                    Markup: stone.Markup || 0
+                }))
+            }));
         }
-
-        let pricing = await exports.calculatePricing(tableJson, enquiry.ClientId);
-
-        asset.Pricing = [{
-            MetalPrice: +pricing.MetalPrice,
-            DiamondsPrice: +pricing.DiamondsPrice,
-            TotalPrice: +pricing.TotalPrice,
-            DutiesAmount: +pricing.DutiesAmount,
-            DiamondWeight: pricing.DiamondWeight,
-            TotalPieces: tableJson.TotalPieces,
-            Loss: pricing.Client.Loss,
-            Labour: pricing.Client.Labour,
-            ExtraCharges: pricing.Client.ExtraCharges,
-            UndercutPrice: pricing.Client.UndercutPrice,
-            NaturalDuties: pricing.Client.NaturalDuties,
-            LabDuties: pricing.Client.LabDuties,
-            GoldDuties: pricing.Client.GoldDuties,
-            SilverAndLabsDuties: pricing.Client.SilverAndLabsDuties,
-            LossAndLabourDuties: pricing.Client.LossAndLabourDuties,
-            ClientPricingMessage: pricing.ClientPricingMessage || null,
-            Metal: {
-                Weight: pricing.Metal.Weight,
-                Quality: pricing.Metal.Quality,
-                Rate: pricing.Metal.Rate
-            },
-            Stones: (pricing.Stones || []).map(stone => ({
-                Type: stone.Type,
-                Color: stone.Color,
-                Shape: stone.Shape,
-                MmSize: stone.MmSize,
-                SieveSize: stone.SieveSize,
-                Weight: stone.Weight,
-                Pcs: stone.Pcs,
-                CtWeight: stone.CtWeight,
-                Price: stone.Price,
-                Markup: stone.Markup || 0
-            }))
-        }];
     }
 
     // Push to the Cad array

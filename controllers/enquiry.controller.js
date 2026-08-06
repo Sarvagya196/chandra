@@ -193,14 +193,14 @@ exports.searchEnquiries = async (req, res) => {
     }
 };
 
-exports.resortEnquiries = async (req, res) => {
+exports.reSortEnquiries = async (req, res) => {
     try {
-        const result = await service.resortEnquiries(req.body);
+        const result = await service.reSortEnquiries(req.body);
         res.json(result);
     } catch (error) {
-        console.error("Error resorting enquiries:", error);
-        if (error.message === 'draggedId is required') {
-            return res.status(400).json({ message: "draggedId is required" });
+        console.error("Error re-sorting enquiries:", error);
+        if (error.status) {
+            return res.status(error.status).json({ message: error.message });
         }
         if (error.message === 'Enquiry not found') {
             return res.status(404).json({ message: "Enquiry not found" });

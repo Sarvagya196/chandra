@@ -62,7 +62,7 @@ function validateExtracted(data) {
     return data;
 }
 
-exports.extractAndPrice = runPricingLimited(async ({ imageBuffer, mimeType, clientId, stoneType, quantity, metalQuality, crop }) => {
+exports.extractAndPrice = runPricingLimited(async ({ imageBuffer, mimeType, clientId, stoneType, stoneTypes, quantity, metalQuality, crop }) => {
     let workingBuffer = await cropByFractions(imageBuffer, crop);
     imageBuffer = null;
     const extracted = validateExtracted(await extractPricingDataFromImage(workingBuffer, mimeType));
@@ -70,21 +70,30 @@ exports.extractAndPrice = runPricingLimited(async ({ imageBuffer, mimeType, clie
 
     const resolvedMetalQuality = metalQuality || extracted.Metal?.Quality || null;
 
-    const pricingDetails = {
+    const types = (Array.isArray(stoneTypes) && stoneTypes.length)
+        ? [...new Set(stoneTypes.filter(Boolean))]
+        : (stoneType ? [stoneType] : ['']);
+
+    const baseDetails = {
         Metal: {
             Weight: extracted.Metal?.Weight || null,
             Quality: resolvedMetalQuality,
         },
         Quantity: quantity || 1,
-        Stones: (extracted.Stones || []).map(stone => ({
-            ...stone,
-            Type: stoneType || '',
-            Markup: 0,
-        })),
         TotalPieces: extracted.TotalPieces || 0,
     };
 
-    const pricing = await calculatePricing(pricingDetails, clientId);
+    const pricing = [];
+    for (const type of types) {
+        pricing.push(await calculatePricing({
+            ...baseDetails,
+            Stones: (extracted.Stones || []).map(stone => ({
+                ...stone,
+                Type: type,
+                Markup: 0,
+            })),
+        }, clientId));
+    }
 
     return { extractedData: extracted, pricing };
 });

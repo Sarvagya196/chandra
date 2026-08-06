@@ -98,14 +98,19 @@ exports.updatePriority = async (id, priority) => {
 
 exports.getMaxOrderKey = async () => {
   const enquiry = await Enquiry.findOne({ OrderKey: { $ne: null } })
-    .sort({ OrderKey: -1 })
+    .sort({ OrderKey: -1, _id: 1 })
     .select({ OrderKey: 1 })
     .lean();
   return enquiry?.OrderKey ?? null;
 };
 
+exports.hasUninitializedOrderKeys = async () => {
+  const count = await Enquiry.countDocuments({ OrderKey: null });
+  return count > 0;
+};
+
 exports.getOrderKeysByIds = async (ids) => {
-  return await Enquiry.find({ _id: { $in: ids } }, { OrderKey: 1, Priority: 1, ClientId: 1 }).lean();
+  return await Enquiry.find({ _id: { $in: ids } }, { OrderKey: 1 }).lean();
 };
 
 exports.setOrderKey = async (id, orderKey) => {
@@ -116,28 +121,10 @@ exports.setOrderKey = async (id, orderKey) => {
   );
 };
 
-exports.rebalanceOrderKeys = async () => {
-  const enquiries = await Enquiry.aggregate([
-    {
-      $addFields: {
-        PriorityOrder: {
-          $switch: {
-            branches: [
-              { case: { $eq: ["$Priority", "Super High"] }, then: 2 },
-              { case: { $eq: ["$Priority", "High"] }, then: 1 }
-            ],
-            default: 0
-          }
-        }
-      }
-    },
-    { $sort: { PriorityOrder: -1, OrderKey: 1 } },
-    { $project: { _id: 1 } }
-  ]);
-
-  const updates = enquiries.map((enquiry, index) => ({
+exports.rebalanceOrderKeys = async (sortedIds) => {
+  const updates = sortedIds.map((id, index) => ({
     updateOne: {
-      filter: { _id: enquiry._id },
+      filter: { _id: id },
       update: { $set: { OrderKey: (index + 1) * 1000 } }
     }
   }));
@@ -145,6 +132,34 @@ exports.rebalanceOrderKeys = async () => {
   if (updates.length) {
     await Enquiry.bulkWrite(updates);
   }
+};
+
+exports.getAllEnquiryOrderKeys = async () => {
+  return await Enquiry.find({}, { _id: 1, Priority: 1, OrderKey: 1 })
+    .sort({ OrderKey: 1, _id: 1 })
+    .lean();
+};
+
+exports.getNullKeyedDocs = async () => {
+  return await Enquiry.find({ OrderKey: null }, { _id: 1, Priority: 1 })
+    .lean();
+};
+
+exports.getKeyedDocs = async () => {
+  return await Enquiry.find({ OrderKey: { $ne: null } }, { _id: 1, Priority: 1, OrderKey: 1 })
+    .sort({ OrderKey: 1, _id: 1 })
+    .lean();
+};
+
+exports.bulkSetOrderKeys = async (updates) => {
+  if (!updates.length) return;
+  const ops = updates.map(({ id, key }) => ({
+    updateOne: {
+      filter: { _id: id },
+      update: { $set: { OrderKey: key } }
+    }
+  }));
+  await Enquiry.bulkWrite(ops);
 };
 
 exports.updateEscalation = async (id, escalation) => {
@@ -352,14 +367,14 @@ exports.search = async (searchTerm, filters, sort, pagination) => {
                 AssignedDate: "$lastStatus.Timestamp",
                 CreatedDate: "$firstStatus.Timestamp",
 
-                // Convert Priority string to a sortable number
+                // Convert Priority string to a sortable number (lower = higher priority)
                 PriorityOrder: {
                     $switch: {
                         branches: [
-                            { case: { $eq: ["$Priority", "Super High"] }, then: 2 },
+                            { case: { $eq: ["$Priority", "Super High"] }, then: 0 },
                             { case: { $eq: ["$Priority", "High"] }, then: 1 }
                         ],
-                        default: 0 // "Normal" or any other value will be 0
+                        default: 2 // "Normal" or any other value will be 2
                     }
                 },
                 

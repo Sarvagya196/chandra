@@ -378,7 +378,23 @@ function formatPricingResponse(context, calc) {
         Metal: {
             Weight: context.metal.weight,
             Quality: context.metal.quality,
-            Rate: +context.metal.fullRate.toFixed(3)
+            Rate: +context.metal.fullRate.toFixed(3),
+            MetalBase: {
+                Rate: +context.metal.rate.toFixed(3),
+                BaseAmount: context.metal.weight,
+                Amount: +calc.metalBase.toFixed(3)
+            },
+            Loss: {
+                Rate: context.charges.loss,
+                BaseAmount: +calc.metalBase.toFixed(3),
+                Amount: +calc.lossAmount.toFixed(3)
+            },
+            Labour: {
+                Rate: context.charges.labour,
+                BaseAmount: context.metal.weight,
+                Amount: +calc.labourAmount.toFixed(3)
+            },
+            MetalPrice: +calc.metalPrice.toFixed(3)
         },
 
         DiamondWeight: +calc.diamondWeight.toFixed(3),
@@ -394,7 +410,8 @@ function formatPricingResponse(context, calc) {
             Pcs: stone.Pcs,
             CtWeight: stone.CtWeight,
             Price: +((stone.Price ?? 0).toFixed(3)),
-            Markup: +((stone.Markup ?? 0).toFixed(3))
+            Markup: +((stone.Markup ?? 0).toFixed(3)),
+            DiamondPrice: +((stone.Price ?? 0) * (stone.CtWeight ?? 0)).toFixed(3),
         })),
 
         Client: {

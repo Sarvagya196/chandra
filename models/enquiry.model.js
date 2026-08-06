@@ -34,6 +34,7 @@ const mongoose = require('mongoose');
   }, { _id: false });
 
   const PricingSchema = new mongoose.Schema({
+    IsSentForApproaval: { type: Boolean, default: false },
     MetalPrice: { type: Number, default: 0 },
     DiamondsPrice: { type: Number, default: 0 },
     TotalPrice: { type: Number, default: 0 },
@@ -80,7 +81,8 @@ const enquirySchema = new mongoose.Schema({
         Quality: String
     },
     Category: String,
-    StoneType: String,
+    // StoneType: String,        // Deprecated - use StoneTypes[] instead
+    StoneTypes: [String],
     MetalWeight: {
         From: Number,
         To: Number,
@@ -174,6 +176,6 @@ enquirySchema.index({ "Coral.CoralCode": 1 });
 enquirySchema.index({ Name: 1 });
 enquirySchema.index({ StyleNumber: 1 });
 enquirySchema.index({ GatiOrderNumber: 1 });
-enquirySchema.index({ OrderKey: 1 });
+enquirySchema.index({ OrderKey: 1, _id: 1 });
 
 module.exports = mongoose.model('Enquiry', enquirySchema);
