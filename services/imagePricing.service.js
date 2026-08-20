@@ -1,6 +1,7 @@
 const sharp = require('sharp');
 const OpenAI = require('openai');
 const { calculatePricing } = require('./pricing.service');
+const { createConcurrencyLimiter } = require('../utils/concurrency');
 const stoneMaster = require('../data/stoneMaster.json');
 
 const openai = new OpenAI({
@@ -10,6 +11,13 @@ const openai = new OpenAI({
 });
 
 const OPENAI_MODEL = 'gpt-5.6-sol';
+
+const OPENAI_CONCURRENCY = 3;
+
+const limitOpenAI =
+    createConcurrencyLimiter(
+        OPENAI_CONCURRENCY
+    );
 
 const stoneItemSchema = {
     type: 'object',
@@ -407,6 +415,64 @@ function calculateTotalPieces(stones) {
     );
 }
 
+const callOpenAI = limitOpenAI(
+    async function (base64, mimeType) {
+        const startTime =
+            Date.now();
+
+        const response =
+            await openai.responses.create({
+                model: OPENAI_MODEL,
+
+                service_tier: 'fast',
+
+                reasoning: {
+                    effort: 'none'
+                },
+
+                instructions:
+                    SYSTEM_INSTRUCTION,
+
+                input: [
+                    {
+                        role: 'user',
+                        content: [
+                            {
+                                type: 'input_text',
+                                text: 'Extract the visible jewelry table exactly.'
+                            },
+                            {
+                                type: 'input_image',
+                                image_url:
+                                    `data:${mimeType};base64,${base64}`,
+                                detail: 'original'
+                            }
+                        ]
+                    }
+                ],
+
+                text: {
+                    format: {
+                        type: 'json_schema',
+                        name: 'jewelry_extraction',
+                        strict: true,
+                        schema: extractionSchema
+                    }
+                }
+            });
+
+        const responseMs =
+            Date.now() -
+            startTime;
+
+        console.log(
+            `[imagePricing] OpenAI response time: ${responseMs}ms`
+        );
+
+        return response;
+    }
+);
+
 async function extractPricingDataFromImage(
     imageBuffer,
     mimeType
@@ -416,62 +482,24 @@ async function extractPricingDataFromImage(
             'base64'
         );
 
-    const startTime =
-        Date.now();
-
     const response =
-        await openai.responses.create({
-            model: OPENAI_MODEL,
-
-            service_tier: 'fast',
-
-            reasoning: {
-                effort: 'none'
-            },
-
-            instructions:
-                SYSTEM_INSTRUCTION,
-
-            input: [
-                {
-                    role: 'user',
-                    content: [
-                        {
-                            type: 'input_text',
-                            text: 'Extract the visible jewelry table exactly.'
-                        },
-                        {
-                            type: 'input_image',
-                            image_url:
-                                `data:${mimeType};base64,${base64}`,
-                            detail: 'original'
-                        }
-                    ]
-                }
-            ],
-
-            text: {
-                format: {
-                    type: 'json_schema',
-                    name: 'jewelry_extraction',
-                    strict: true,
-                    schema: extractionSchema
-                }
-            }
-        });
-
-    const responseMs =
-        Date.now() -
-        startTime;
-
-    console.log(
-        `[imagePricing] OpenAI response time: ${responseMs}ms`
-    );
-
-    const extracted =
-        JSON.parse(
-            response.output_text
+        await callOpenAI(
+            base64,
+            mimeType
         );
+
+    let extracted;
+
+    try {
+        extracted =
+            JSON.parse(
+                response.output_text
+            );
+    } catch (err) {
+        throw new Error(
+            'AI returned unparseable extraction output'
+        );
+    }
 
     const stones =
         (extracted.Stones || [])
@@ -529,6 +557,30 @@ function validateExtracted(data) {
 
 exports.extractPricingDataFromImage =
     extractPricingDataFromImage;
+
+exports.SYSTEM_INSTRUCTION =
+    SYSTEM_INSTRUCTION;
+
+exports.extractionSchema =
+    extractionSchema;
+
+exports.cropByFractions =
+    cropByFractions;
+
+exports.validateStoneRow =
+    validateStoneRow;
+
+exports.calculateTotalPieces =
+    calculateTotalPieces;
+
+exports.normalizeMm =
+    normalizeMm;
+
+exports.normalizeSieve =
+    normalizeSieve;
+
+exports.validateExtracted =
+    validateExtracted;
 
 exports.extractAndPrice =
 async ({
