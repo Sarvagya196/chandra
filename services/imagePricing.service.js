@@ -1,47 +1,43 @@
 const sharp = require('sharp');
-const { GoogleGenerativeAI, SchemaType } = require('@google/generative-ai');
+const OpenAI = require('openai');
 const { calculatePricing } = require('./pricing.service');
-const { createConcurrencyLimiter } = require('../utils/concurrency');
 const stoneMaster = require('../data/stoneMaster.json');
 
-const MAX_CONCURRENT_PRICING = 3;
-const CT_TOLERANCE = 0.02;
-const WEIGHT_TOLERANCE = 0.0006;
+const MASTER_WEIGHT_TOLERANCE = 0.0021;
+const ROW_WEIGHT_TOLERANCE = 0.001;
 
-const runPricingLimited = createConcurrencyLimiter(MAX_CONCURRENT_PRICING);
+const openai = new OpenAI({
+    apiKey: process.env.OPENAI_API_KEY,
+    timeout: 9000,
+    maxRetries: 0
+});
 
-const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
+const OPENAI_MODEL = 'gpt-5.6-sol';
 
 const stoneItemSchema = {
-    type: SchemaType.OBJECT,
+    type: 'object',
+    additionalProperties: false,
     properties: {
         Color: {
-            type: SchemaType.STRING,
-            nullable: true
+            type: ['string', 'null']
         },
         Shape: {
-            type: SchemaType.STRING,
-            nullable: true
+            type: ['string', 'null']
         },
         MmSize: {
-            type: SchemaType.STRING,
-            nullable: true
+            type: ['string', 'null']
         },
         SieveSize: {
-            type: SchemaType.STRING,
-            nullable: true
+            type: ['string', 'null']
         },
         Weight: {
-            type: SchemaType.NUMBER,
-            nullable: true
+            type: ['number', 'null']
         },
         Pcs: {
-            type: SchemaType.NUMBER,
-            nullable: true
+            type: ['number', 'null']
         },
         CtWeight: {
-            type: SchemaType.NUMBER,
-            nullable: true
+            type: ['number', 'null']
         }
     },
     required: [
@@ -56,27 +52,34 @@ const stoneItemSchema = {
 };
 
 const extractionSchema = {
-    type: SchemaType.OBJECT,
+    type: 'object',
+    additionalProperties: false,
     properties: {
         Stones: {
-            type: SchemaType.ARRAY,
+            type: 'array',
             items: stoneItemSchema
         },
         Metal: {
-            type: SchemaType.OBJECT,
+            type: 'object',
+            additionalProperties: false,
             properties: {
                 Weight: {
-                    type: SchemaType.NUMBER,
-                    nullable: true
+                    type: ['number', 'null']
                 },
                 Quality: {
-                    type: SchemaType.STRING,
-                    nullable: true
+                    type: ['string', 'null']
                 }
-            }
+            },
+            required: [
+                'Weight',
+                'Quality'
+            ]
         }
     },
-    required: ['Stones', 'Metal']
+    required: [
+        'Stones',
+        'Metal'
+    ]
 };
 
 const SYSTEM_INSTRUCTION = `
@@ -102,13 +105,8 @@ Never merge rows.
 Never split rows.
 Return null when a value cannot be read reliably.
 Extract metal weight and quality only when visible.
-Return only the required JSON.
+Return only the required structured data.
 `;
-
-const model = genAI.getGenerativeModel({
-    model: process.env.GEMINI_MODEL || 'gemini-2.5-flash',
-    systemInstruction: SYSTEM_INSTRUCTION
-});
 
 async function cropByFractions(buffer, crop) {
     if (!crop) return buffer;
@@ -196,7 +194,8 @@ function normalizeMm(value) {
         return null;
     }
 
-    return Number(match[0]).toFixed(2);
+    return Number(match[0])
+        .toFixed(2);
 }
 
 function normalizeSieve(value) {
@@ -226,14 +225,14 @@ function validateMath(row) {
 
     if (
         !Number.isInteger(pcs) ||
-        pcs < 0
+        pcs <= 0
     ) {
         return false;
     }
 
     if (
         !Number.isFinite(weight) ||
-        weight < 0
+        weight <= 0
     ) {
         return false;
     }
@@ -245,9 +244,11 @@ function validateMath(row) {
         return false;
     }
 
+    const impliedWeight = ctWeight / pcs;
+
     return Math.abs(
-        (pcs * weight) - ctWeight
-    ) < CT_TOLERANCE;
+        impliedWeight - weight
+    ) <= ROW_WEIGHT_TOLERANCE;
 }
 
 function validateMaster(row) {
@@ -291,7 +292,7 @@ function validateMaster(row) {
             avg =>
                 Math.abs(
                     Number(avg) - weight
-                ) <= WEIGHT_TOLERANCE
+                ) <= MASTER_WEIGHT_TOLERANCE
         );
 
     return {
@@ -352,38 +353,54 @@ async function extractPricingDataFromImage(
     mimeType
 ) {
     const base64 =
-        imageBuffer.toString('base64');
+        imageBuffer.toString(
+            'base64'
+        );
 
     const response =
-        await model.generateContent({
-            contents: [
+        await openai.responses.create({
+            model: OPENAI_MODEL,
+
+            service_tier: 'fast',
+
+            reasoning: {
+                effort: 'none'
+            },
+
+            instructions:
+                SYSTEM_INSTRUCTION,
+
+            input: [
                 {
                     role: 'user',
-                    parts: [
+                    content: [
                         {
-                            text: 'Extract the visible jewelry table exactly into the required JSON schema.'
+                            type: 'input_text',
+                            text: 'Extract the visible jewelry table exactly.'
                         },
                         {
-                            inlineData: {
-                                mimeType,
-                                data: base64
-                            }
+                            type: 'input_image',
+                            image_url:
+                                `data:${mimeType};base64,${base64}`,
+                            detail: 'original'
                         }
                     ]
                 }
             ],
-            generationConfig: {
-                temperature: 0,
-                responseMimeType:
-                    'application/json',
-                responseSchema:
-                    extractionSchema
+
+            text: {
+                format: {
+                    type: 'json_schema',
+                    name: 'jewelry_extraction',
+                    strict: true,
+                    schema: extractionSchema
+                }
             }
         });
 
     const extracted =
         JSON.parse(
-            response.response.text()
+            response.output_text
         );
 
     const stones =
@@ -398,7 +415,9 @@ async function extractPricingDataFromImage(
                 Quality: null
             },
         TotalPieces:
-            calculateTotalPieces(stones)
+            calculateTotalPieces(
+                stones
+            )
     };
 }
 
@@ -408,13 +427,17 @@ function validateExtracted(data) {
         typeof data !== 'object'
     ) {
         throw new Error(
-            'LLM returned invalid data'
+            'AI returned invalid data'
         );
     }
 
-    if (!Array.isArray(data.Stones)) {
+    if (
+        !Array.isArray(
+            data.Stones
+        )
+    ) {
         throw new Error(
-            'LLM response missing Stones array'
+            'AI response missing Stones array'
         );
     }
 
@@ -423,7 +446,7 @@ function validateExtracted(data) {
         typeof data.Metal !== 'object'
     ) {
         throw new Error(
-            'LLM response missing Metal object'
+            'AI response missing Metal object'
         );
     }
 
@@ -434,7 +457,7 @@ exports.extractPricingDataFromImage =
     extractPricingDataFromImage;
 
 exports.extractAndPrice =
-runPricingLimited(async ({
+async ({
     imageBuffer,
     mimeType,
     clientId,
@@ -463,10 +486,20 @@ runPricingLimited(async ({
 
     const invalidRows =
         extracted.Stones.filter(
-            stone => !stone.Valid
+            stone =>
+                !stone.Valid
         );
 
     if (invalidRows.length) {
+        console.error(
+            '[imagePricing] invalid rows:',
+            JSON.stringify(
+                invalidRows,
+                null,
+                2
+            )
+        );
+
         const error =
             new Error(
                 'Stone validation failed'
@@ -491,6 +524,7 @@ runPricingLimited(async ({
             Weight:
                 extracted.Metal?.Weight ??
                 null,
+
             Quality:
                 resolvedMetalQuality
         },
@@ -501,20 +535,32 @@ runPricingLimited(async ({
         Stones:
             extracted.Stones.map(
                 stone => ({
-                    Color: stone.Color,
-                    Shape: stone.Shape,
-                    MmSize: stone.MmSize,
+                    Color:
+                        stone.Color,
+
+                    Shape:
+                        stone.Shape,
+
+                    MmSize:
+                        stone.MmSize,
+
                     SieveSize:
                         stone.SieveSize,
+
                     Weight:
                         stone.Weight,
+
                     Pcs:
                         stone.Pcs,
+
                     CtWeight:
                         stone.CtWeight,
+
                     Type:
                         stoneType || '',
-                    Markup: 0
+
+                    Markup:
+                        0
                 })
             ),
 
@@ -529,7 +575,8 @@ runPricingLimited(async ({
         );
 
     return {
-        extractedData: extracted,
+        extractedData:
+            extracted,
         pricing
     };
-});
+};
