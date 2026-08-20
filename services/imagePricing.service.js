@@ -3,9 +3,6 @@ const OpenAI = require('openai');
 const { calculatePricing } = require('./pricing.service');
 const stoneMaster = require('../data/stoneMaster.json');
 
-const MASTER_WEIGHT_TOLERANCE = 0.0021;
-const ROW_WEIGHT_TOLERANCE = 0.001;
-
 const openai = new OpenAI({
     apiKey: process.env.OPENAI_API_KEY,
     timeout: 9000,
@@ -182,118 +179,167 @@ async function cropByFractions(buffer, crop) {
 }
 
 function normalizeMm(value) {
-    if (value == null) {
-        return null;
-    }
+    if (value == null) return null;
 
     const match = String(value)
         .replace(/\s+/g, '')
         .match(/\d+(?:\.\d+)?/);
 
-    if (!match) {
-        return null;
-    }
+    if (!match) return null;
 
     return Number(match[0])
         .toFixed(2);
 }
 
 function normalizeSieve(value) {
-    if (value == null) {
-        return null;
-    }
+    if (value == null) return null;
 
-    return String(value)
+    const normalized = String(value)
         .toUpperCase()
         .replace(/\s+/g, '')
         .replace(/CRD/g, '')
         .trim();
+
+    if (
+        !normalized ||
+        normalized === '#N/A' ||
+        normalized === 'N/A' ||
+        normalized === 'NA' ||
+        normalized === '-'
+    ) {
+        return null;
+    }
+
+    return normalized;
+}
+
+function withinTolerance(
+    actual,
+    expected,
+    absoluteTolerance,
+    relativeTolerance
+) {
+    const a = Number(actual);
+    const e = Number(expected);
+
+    if (
+        !Number.isFinite(a) ||
+        !Number.isFinite(e)
+    ) {
+        return null;
+    }
+
+    const difference =
+        Math.abs(a - e);
+
+    const tolerance =
+        Math.max(
+            absoluteTolerance,
+            Math.abs(e) * relativeTolerance
+        );
+
+    return difference <= tolerance;
 }
 
 function validateMath(row) {
-    if (
-        row.Pcs == null ||
-        row.Weight == null ||
-        row.CtWeight == null
-    ) {
-        return false;
-    }
-
     const pcs = Number(row.Pcs);
     const weight = Number(row.Weight);
     const ctWeight = Number(row.CtWeight);
 
     if (
-        !Number.isInteger(pcs) ||
-        pcs <= 0
-    ) {
-        return false;
-    }
-
-    if (
+        !Number.isFinite(pcs) ||
         !Number.isFinite(weight) ||
-        weight <= 0
-    ) {
-        return false;
-    }
-
-    if (
         !Number.isFinite(ctWeight) ||
+        pcs <= 0 ||
+        weight < 0 ||
         ctWeight < 0
     ) {
-        return false;
+        return null;
     }
 
-    const impliedWeight = ctWeight / pcs;
+    const expectedCtWeight =
+        pcs * weight;
 
-    return Math.abs(
-        impliedWeight - weight
-    ) <= ROW_WEIGHT_TOLERANCE;
+    return withinTolerance(
+        ctWeight,
+        expectedCtWeight,
+        0.01,
+        0.03
+    );
 }
 
 function validateMaster(row) {
-    const mm = normalizeMm(row.MmSize);
+    const mm =
+        normalizeMm(row.MmSize);
 
     if (!mm) {
         return {
             masterFound: false,
-            mmValid: false,
-            sieveValid: false,
-            weightValid: false
+            mmValid: null,
+            sieveValid: null,
+            weightValid: null
         };
     }
 
-    const master = stoneMaster[mm];
+    const master =
+        stoneMaster[mm];
 
     if (!master) {
         return {
             masterFound: false,
-            mmValid: false,
-            sieveValid: false,
-            weightValid: false
+            mmValid: null,
+            sieveValid: null,
+            weightValid: null
         };
     }
 
     const extractedSieve =
-        normalizeSieve(row.SieveSize);
+        normalizeSieve(
+            row.SieveSize
+        );
 
-    const sieveValid =
-        master.sieveSizes.some(
-            sieve =>
-                normalizeSieve(sieve) ===
+    const masterSieves =
+        (master.sieveSizes || [])
+            .map(normalizeSieve)
+            .filter(Boolean);
+
+    let sieveValid = null;
+
+    if (
+        extractedSieve &&
+        masterSieves.length
+    ) {
+        sieveValid =
+            masterSieves.includes(
                 extractedSieve
-        );
+            );
+    }
 
-    const weight = Number(row.Weight);
+    const weight =
+        Number(row.Weight);
 
-    const weightValid =
+    const masterWeights =
+        (master.avgWeights || [])
+            .map(Number)
+            .filter(Number.isFinite);
+
+    let weightValid = null;
+
+    if (
         Number.isFinite(weight) &&
-        master.avgWeights.some(
-            avg =>
-                Math.abs(
-                    Number(avg) - weight
-                ) <= MASTER_WEIGHT_TOLERANCE
-        );
+        masterWeights.length
+    ) {
+        weightValid =
+            masterWeights.some(
+                masterWeight =>
+                    withinTolerance(
+                        weight,
+                        masterWeight,
+                        0.002,
+                        0.08
+                    )
+            );
+    }
 
     return {
         masterFound: true,
@@ -304,27 +350,40 @@ function validateMaster(row) {
 }
 
 function validateStoneRow(row) {
-    const master =
-        validateMaster(row);
-
     const mathValid =
         validateMath(row);
 
-    const valid =
-        master.masterFound &&
-        master.mmValid &&
-        master.sieveValid &&
-        master.weightValid &&
-        mathValid;
+    const master =
+        validateMaster(row);
+
+    const checks = [
+        mathValid,
+        master.sieveValid,
+        master.weightValid
+    ].filter(
+        value => value !== null
+    );
+
+    const passed =
+        checks.some(
+            value => value === true
+        );
 
     return {
         ...row,
-        Valid: valid,
+        Valid: passed,
+        NeedsReview:
+            checks.length > 0 &&
+            !passed,
         Validation: {
-            MmSize: master.mmValid,
-            SieveSize: master.sieveValid,
-            AvgWeight: master.weightValid,
-            CtWeight: mathValid
+            MmSize:
+                master.mmValid,
+            SieveSize:
+                master.sieveValid,
+            AvgWeight:
+                master.weightValid,
+            CtWeight:
+                mathValid
         }
     };
 }
@@ -336,7 +395,7 @@ function calculateTotalPieces(stones) {
                 Number(stone.Pcs);
 
             if (
-                !Number.isInteger(pcs) ||
+                !Number.isFinite(pcs) ||
                 pcs < 0
             ) {
                 return total;
@@ -356,6 +415,9 @@ async function extractPricingDataFromImage(
         imageBuffer.toString(
             'base64'
         );
+
+    const startTime =
+        Date.now();
 
     const response =
         await openai.responses.create({
@@ -398,6 +460,14 @@ async function extractPricingDataFromImage(
             }
         });
 
+    const responseMs =
+        Date.now() -
+        startTime;
+
+    console.log(
+        `[imagePricing] OpenAI response time: ${responseMs}ms`
+    );
+
     const extracted =
         JSON.parse(
             response.output_text
@@ -405,15 +475,19 @@ async function extractPricingDataFromImage(
 
     const stones =
         (extracted.Stones || [])
-            .map(validateStoneRow);
+            .map(
+                validateStoneRow
+            );
 
     return {
         Stones: stones,
+
         Metal:
             extracted.Metal || {
                 Weight: null,
                 Quality: null
             },
+
         TotalPieces:
             calculateTotalPieces(
                 stones
@@ -484,39 +558,25 @@ async ({
 
     workingBuffer = null;
 
-    const invalidRows =
+    const reviewRows =
         extracted.Stones.filter(
             stone =>
-                !stone.Valid
+                stone.NeedsReview
         );
 
-    if (invalidRows.length) {
-        console.error(
-            '[imagePricing] invalid rows:',
+    if (reviewRows.length) {
+        console.warn(
+            '[imagePricing] rows need review:',
             JSON.stringify(
-                invalidRows,
+                reviewRows,
                 null,
                 2
             )
         );
-
-        const error =
-            new Error(
-                'Stone validation failed'
-            );
-
-        error.code =
-            'STONE_VALIDATION_FAILED';
-
-        error.invalidRows =
-            invalidRows;
-
-        throw error;
     }
 
     const resolvedMetalQuality =
         metalQuality ||
-        extracted.Metal?.Quality ||
         null;
 
     const pricingDetails = {
