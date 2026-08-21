@@ -1,6 +1,7 @@
 const metalPricesService = require('./metalPrices.service');
 const clientService = require('./client.service');
 const { normalizeShape, isRoundShape } = require('../utils/shapes');
+const { convertMetalWeight } = require('../utils/metalDensity');
 const OpenAI = require('openai');
 
 const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
@@ -21,11 +22,32 @@ function normalizeMmSize(value) {
     return normalizeNumber(value);
 }
 
-async function resolvePricingContext(pricingDetails, clientId, isOnlyMetalDesign = false, isRecalculate = false) {
-    const todaysMetalRates = await metalPricesService.getLatest();
+function parseKarat(quality) {
+    const match = quality?.toUpperCase().match(/^(\d{1,2})K(?:T)?$/);
+    return match ? parseInt(match[1], 10) : null;
+}
 
-    const metalWeight = parseFloat(pricingDetails.Metal.Weight) || 0;
-    const metalQuality = pricingDetails.Metal.Quality;
+
+async function resolvePricingContext(pricingDetails, clientId, isOnlyMetalDesign = false, isRecalculate = false, UpdatedmetalQuality = "") {
+    const todaysMetalRates = await metalPricesService.getLatest();
+    console.log(`[updatedMetalQuality] ${UpdatedmetalQuality}`,`oldMetalQuality] ${pricingDetails.Metal.Quality}`);
+
+    const baseQuality = pricingDetails.Metal.Quality;
+    const metalQuality = UpdatedmetalQuality || baseQuality;
+    let  metalWeight = parseFloat(pricingDetails.Metal.Weight) || 0;
+    if(baseQuality && metalQuality === 0){
+        metalWeight = parseFloat(pricingDetails.Metal.Weight) || 0;
+    }
+    else if (baseQuality !== metalQuality) {
+       metalWeight = convertMetalWeight(
+        parseFloat(pricingDetails.Metal.Weight) || 0,
+        baseQuality,
+        metalQuality
+    );
+    }
+    else {
+      metalWeight = parseFloat(pricingDetails.Metal.Weight) || 0;
+    }
     const metalRateOverride = pricingDetails.Metal.Rate;
     const MetalOunceOverride = pricingDetails.Metal.GoldRatePerOunce;
     const quantity = pricingDetails.Quantity || 1;
@@ -45,11 +67,15 @@ async function resolvePricingContext(pricingDetails, clientId, isOnlyMetalDesign
         const goldRate = gramRateFromOunce ?? metalRateOverride ?? todaysMetalRates.gold?.price ?? 0;
         metalFullRate = goldRate;
 
-        const match = metalQuality?.toUpperCase().match(/^(\d{1,2})K$/);
-        if (!match) throw new Error(`Invalid gold quality: ${metalQuality}`);
+        if (metalWeight === 0 || !metalQuality) {
+            metalRate = goldRate;
+        } else {
+            const karat = parseKarat(metalQuality);
+            if (!karat) throw new Error(`Invalid gold quality: ${metalQuality}`);
 
-        metalRate = (goldRate * parseInt(match[1], 10)) / 24;
-        console.log(`[pricing] gold rate: ${goldRate}, karat: ${match[1]}, metalRate: ${metalRate}`);
+            metalRate = (goldRate * karat) / 24;
+            console.log(`[pricing] gold rate: ${goldRate}, karat: ${karat}, metalRate: ${metalRate}`);
+        }
     }
 
     const client = await clientService.getClient(clientId);
@@ -308,7 +334,6 @@ function calculatePricingEngine(context) {
 }
 
 function formatPricingResponse(context, calc) {
-    console.log(context);
     return {
         MetalKT: context.metal.quality,
         GoldRate24K: +context.metal.fullRate.toFixed(3),
@@ -381,7 +406,23 @@ function formatPricingResponse(context, calc) {
         Metal: {
             Weight: context.metal.weight,
             Quality: context.metal.quality,
-            Rate: +context.metal.fullRate.toFixed(3)
+            Rate: +context.metal.fullRate.toFixed(3),
+            MetalBase: {
+                Rate: +context.metal.rate.toFixed(3),
+                BaseAmount: context.metal.weight,
+                Amount: +calc.metalBase.toFixed(3)
+            },
+            Loss: {
+                Rate: context.charges.loss,
+                BaseAmount: +calc.metalBase.toFixed(3),
+                Amount: +calc.lossAmount.toFixed(3)
+            },
+            Labour: {
+                Rate: context.charges.labour,
+                BaseAmount: context.metal.weight,
+                Amount: +calc.labourAmount.toFixed(3)
+            },
+            MetalPrice: +calc.metalPrice.toFixed(3)
         },
 
         DiamondWeight: +calc.diamondWeight.toFixed(3),
@@ -397,7 +438,8 @@ function formatPricingResponse(context, calc) {
             Pcs: stone.Pcs,
             CtWeight: stone.CtWeight,
             Price: +((stone.Price ?? 0).toFixed(3)),
-            Markup: +((stone.Markup ?? 0).toFixed(3))
+            Markup: +((stone.Markup ?? 0).toFixed(3)),
+            DiamondPrice: +((stone.Price ?? 0) * (stone.CtWeight ?? 0)).toFixed(3),
         })),
 
         Client: {
@@ -444,8 +486,8 @@ Generate a professional, concise pricing message following the exact format prov
     }
 }
 
-async function calculatePricing(pricingDetails, clientId, isOnlyMetalDesign = false, isRecalculate = false) {
-    const context = await resolvePricingContext(pricingDetails, clientId, isOnlyMetalDesign, isRecalculate);
+async function calculatePricing(pricingDetails, clientId, isOnlyMetalDesign = false, isRecalculate = false, UpdatedmetalQuality = "") {
+    const context = await resolvePricingContext(pricingDetails, clientId, isOnlyMetalDesign, isRecalculate, UpdatedmetalQuality);
     const calculation = calculatePricingEngine(context);
     const result = formatPricingResponse(context, calculation);
 
@@ -460,7 +502,5 @@ module.exports = {
     calculatePricing,
     resolvePricingContext,
     calculatePricingEngine,
-    formatPricingResponse,
-    generatePricingMessage,
-    normalizeMmSize
+    formatPricingResponse
 };
