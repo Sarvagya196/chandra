@@ -178,9 +178,11 @@ exports.createEnquiry = async (data, files = [], userId, referenceImageDescripti
     const adminIds = await userService.getUsersByRole(adminRoleId);
     const clientIds = await userService.getUsersByClient(enquiry.ClientId);
     const designerId = AssignedTo || null;
+    const designerUser = designerId ? await userService.getUserById(designerId) : null;
+    const designerName = designerUser?.name || null;
 
-    await chatService.createChat(enquiry._id, enquiry.Name, 'admin-client', [...adminIds, ...clientIds]);
-    await chatService.createChat(enquiry._id, enquiry.Name, 'admin-designer', designerId ? [...adminIds, designerId] : [...adminIds]);
+    await chatService.createChat(enquiry._id, enquiry.Name, 'admin-client', [...adminIds, ...clientIds], designerId, designerName);
+    await chatService.createChat(enquiry._id, enquiry.Name, 'admin-designer', designerId ? [...adminIds, designerId] : [...adminIds], designerId, designerName);
 
     // 5️⃣ 🔔 Send notifications
     try {
@@ -295,6 +297,7 @@ exports.updateEnquiry = async (id, data, userId) => {
         // 🟢 Add new designer to admin-designer chat
         if (newAssignee?._id) {
             await chatService.addParticipantIfMissing(enquiry._id, 'admin-designer', newAssignee._id);
+            await chatService.updateAssignedTo(enquiry._id, data.AssignedTo, newAssignee?.name || null);
 
             // 5️⃣ 🔔 Send notification to new assignee
             try {

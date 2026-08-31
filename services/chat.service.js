@@ -10,7 +10,7 @@ const messageService = require('../services/message.service');
  * @param {String} data.Type - 'admin-client' | 'admin-designer'
  * @param {Array<ObjectId>} data.Participants
  */
-exports.createChat = async (EnquiryId, EnquiryName, Type, Participants) => {
+exports.createChat = async (EnquiryId, EnquiryName, Type, Participants, AssignedTo = null, AssignedToName = null) => {
   try {
     // Validate required fields
     if (!EnquiryId) {
@@ -38,6 +38,8 @@ exports.createChat = async (EnquiryId, EnquiryName, Type, Participants) => {
       EnquiryName,
       Type,
       Participants,
+      AssignedTo,
+      AssignedToName,
     });
 
     return chat;
@@ -112,8 +114,8 @@ exports.addParticipantIfMissing = async (EnquiryId, Type, UserId) => {
  * @param {Number} limit - Items per page
  * @param {String} search - Optional search term
  */
-exports.getChatsForUser = async (userId, page = 1, limit = 10, search = '') => {
-  const { total, data } = await repo.getChatsForUserAgg(userId, page, limit, search);
+exports.getChatsForUser = async (userId, page = 1, limit = 10, search = '', assigneeId = null) => {
+  const { total, data } = await repo.getChatsForUserAgg(userId, page, limit, search, assigneeId);
 
   // Format chats for frontend
   const formatted = data.map((chat) => {
@@ -137,6 +139,8 @@ exports.getChatsForUser = async (userId, page = 1, limit = 10, search = '') => {
       _id: chat._id,
       EnquiryId: chat.EnquiryId,
       EnquiryName: chat.EnquiryName,
+      AssignedTo: chat.AssignedTo,
+      AssignedToName: chat.AssignedToName,
       Type: chat.Type,
       LastMessage: {
         Text: messageText,
@@ -180,6 +184,25 @@ exports.markChatAsRead = async (chatId, userIds) => {
   } catch (err) {
     console.error(`❌ Failed to mark chat ${chatId} as read:`, err);
     throw err;
+  }
+};
+
+exports.getAssigneeList = async (userId) => {
+  try {
+    const data = await repo.getAssigneeListAgg(userId);
+    return { Data: data };
+  } catch (error) {
+    console.error('Error fetching assignee list:', error);
+    throw error;
+  }
+};
+
+exports.updateAssignedTo = async (enquiryId, assignedTo, assignedToName) => {
+  try {
+    await repo.updateAssignedTo(enquiryId, assignedTo, assignedToName);
+  } catch (error) {
+    console.error(`Error updating AssignedTo for Enquiry ${enquiryId}:`, error);
+    throw error;
   }
 };
 

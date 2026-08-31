@@ -532,13 +532,25 @@ const swaggerSpec = {
             Chat: {
                 type: 'object',
                 properties: {
-                    _id:         { type: 'string' },
-                    EnquiryId:   { type: 'string' },
-                    Name:        { type: 'string' },
-                    Type:        { type: 'string', enum: ['admin-client', 'admin-designer'] },
-                    Participants: { type: 'array', items: { type: 'string' } },
-                    LastMessage: { type: 'string' },
-                    UpdatedAt:   { type: 'string', format: 'date-time' },
+                    _id:           { type: 'string' },
+                    EnquiryId:     { type: 'string' },
+                    Name:          { type: 'string' },
+                    AssignedTo:    { type: 'string', nullable: true },
+                    AssignedToName: { type: 'string', nullable: true },
+                    Type:          { type: 'string', enum: ['admin-client', 'admin-designer'] },
+                    Participants:  { type: 'array', items: { type: 'string' } },
+                    LastMessage:   { type: 'string' },
+                    UpdatedAt:     { type: 'string', format: 'date-time' },
+                },
+            },
+            Assignee: {
+                type: 'object',
+                properties: {
+                    AssignedTo:   { type: 'string' },
+                    Name:         { type: 'string' },
+                    Email:        { type: 'string' },
+                    UnreadTotal:  { type: 'number' },
+                    ChatCount:    { type: 'number' },
                 },
             },
             Message: {
@@ -1262,11 +1274,29 @@ const swaggerSpec = {
             get: {
                 tags: ['Chats'],
                 summary: 'Get all chats for the authenticated user',
+                parameters: [
+                    { in: 'query', name: 'assignedTo', schema: { type: 'string' }, description: 'Filter by assigned designer ID' },
+                ],
                 responses: {
                     200: {
                         content: {
                             'application/json': {
                                 schema: { type: 'array', items: { $ref: '#/components/schemas/Chat' } },
+                            },
+                        },
+                    },
+                },
+            },
+        },
+        '/api/chats/assignees': {
+            get: {
+                tags: ['Chats'],
+                summary: 'Get distinct assignees with unread counts for the authenticated user',
+                responses: {
+                    200: {
+                        content: {
+                            'application/json': {
+                                schema: { type: 'array', items: { $ref: '#/components/schemas/Assignee' } },
                             },
                         },
                     },

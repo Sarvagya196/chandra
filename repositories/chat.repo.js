@@ -53,7 +53,7 @@ exports.updateLastMessage = async (chatId, messageId) => {
 /**
  * Aggregation for getting chats for a user with optional search and pagination.
  */
-exports.getChatsForUserAgg = async (userId, page = 1, limit = 10, search = '') => {
+exports.getChatsForUserAgg = async (userId, page = 1, limit = 10, search = '', assigneeId = null) => {
   const skip = (page - 1) * limit;
 
     // Match only chats the user is part of
@@ -71,6 +71,11 @@ exports.getChatsForUserAgg = async (userId, page = 1, limit = 10, search = '') =
     }
 
     match.$and.push({ $or: orConditions });
+  }
+
+  // Optional filter by assigned designer
+  if (assigneeId) {
+    match.$and.push({ AssignedTo: new ObjectId(String(assigneeId)) });
   }
 
   const pipeline = [
@@ -103,6 +108,8 @@ exports.getChatsForUserAgg = async (userId, page = 1, limit = 10, search = '') =
       $project: {
         EnquiryId: 1,
         EnquiryName: 1,
+        AssignedTo: 1,
+        AssignedToName: 1,
         Type: 1,
         UpdatedAt: 1,
         Participants: 1,
@@ -259,5 +266,65 @@ exports.deleteChatsByEnquiryId = async (enquiryId) => {
  */
 exports.findChatsByEnquiryId = async (enquiryId) => {
   return Chat.find({ EnquiryId: enquiryId }).lean();
+};
+
+/**
+ * Updates AssignedTo on all chats for an Enquiry.
+ */
+exports.updateAssignedTo = async (enquiryId, assignedTo, assignedToName) => {
+  return Chat.updateMany(
+    { EnquiryId: enquiryId },
+    { $set: { AssignedTo: assignedTo, AssignedToName: assignedToName } }
+  );
+};
+
+/**
+ * Returns distinct assignees with unread counts for a given user.
+ */
+exports.getAssigneeListAgg = async (userId) => {
+  const pipeline = [
+    { $match: { Participants: new ObjectId(String(userId)), AssignedTo: { $ne: null } } },
+    {
+      $addFields: {
+        UnreadCount: {
+          $let: {
+            vars: {
+              userRead: {
+                $arrayElemAt: [{
+                  $filter: { input: '$LastRead', as: 'lr', cond: { $eq: ['$$lr.UserId', new ObjectId(String(userId))] } }
+                }, 0]
+              }
+            },
+            in: { $ifNull: ['$$userRead.UnreadCount', 0] }
+          }
+        }
+      }
+    },
+    {
+      $group: {
+        _id: '$AssignedTo',
+        AssignedToName: { $first: '$AssignedToName' },
+        UnreadTotal: { $sum: '$UnreadCount' },
+        ChatCount: { $sum: 1 }
+      }
+    },
+    {
+      $lookup: { from: 'users', localField: '_id', foreignField: '_id', as: 'User' }
+    },
+    { $unwind: { path: '$User', preserveNullAndEmptyArrays: true } },
+    {
+      $project: {
+        _id: 0,
+        AssignedTo: '$_id',
+        Name: { $ifNull: ['$AssignedToName', '$User.name'] },
+        Email: '$User.email',
+        UnreadTotal: 1,
+        ChatCount: 1
+      }
+    },
+    { $sort: { Name: 1 } }
+  ];
+
+  return Chat.aggregate(pipeline);
 };
 
