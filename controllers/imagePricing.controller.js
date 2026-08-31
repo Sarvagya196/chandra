@@ -15,7 +15,7 @@ exports.extractAndPrice = async (req, res) => {
     if (!clientId) {
         return res.status(400).json({ error: 'clientId is required' });
     }
-    if(!stoneType) {
+    if (!stoneType) {
         return res.status(400).json({ error: 'stoneType is required' });
     }
 
@@ -32,9 +32,9 @@ exports.extractAndPrice = async (req, res) => {
             imageBuffer: req.file.buffer,
             mimeType: req.file.mimetype,
             clientId,
-            stoneType: stoneType || null,
+            stoneType,
             quantity: quantity ? parseInt(quantity, 10) : 1,
-            metalQuality: metalQuality || null,
+            metalQuality,
             crop,
         });
         res.json(result);
